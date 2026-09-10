@@ -198,6 +198,13 @@ class _AgentRegisterScreenState extends State<AgentRegisterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Image.asset(
+                "assets/images/fastrecovery_logo-2.png",
+                width: 230,
+                //height: 70,
+                fit: BoxFit.contain,
+                alignment: Alignment.center,
+              ),
               Text(
                 'Agent self-registration',
                 style: AppTextStyles.display(
@@ -275,7 +282,7 @@ class _AgentRegisterScreenState extends State<AgentRegisterScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
+                  child: DropdownButton<String>(dropdownColor: Colors.white,
                     value: _role,
                     isExpanded: true,
                     icon: const Icon(Icons.keyboard_arrow_down_rounded),

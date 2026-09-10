@@ -6,6 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../Model_class/Proffile_model.dart';
 import '../theme/app_theme.dart';
+import 'Auth/Login/Login_page.dart';
+import 'Screen/ID_card.dart';
+import 'Screen/home.dart';
+import 'Service/SharedPreferenceService.dart';
+import 'main.dart';
 
 class AgencyDashboardPage extends StatefulWidget {
   const AgencyDashboardPage({super.key});
@@ -36,11 +41,15 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   int _remainingDays = 0;
   int _offlineRecords = 0;
 
+  int _drawerIndex = 0;
+  bool _userDataLoading = true;
+
   // API stats (kept for future use, not shown right now)
   int _totalCases = 0;
   int _todayActivity = 0;
   int _pendingConfirmations = 0;
   int _inventoryConfirmed = 0;
+
   int _totalConfirmations = 0;
   int _confirmedConfirmations = 0;
 
@@ -109,7 +118,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       final offlineRecords = prefs.getInt('offlineRecords') ?? 0;
       final syncCode = prefs.getString('syncCode') ?? '----';
       final agencyTag = prefs.getString('agencyTag') ?? '';
-      final isOnline = prefs.getBool('isOnline') ?? true;
+      //final isOnline = prefs.getBool('isOnline') ?? true;
 
       // All backend calls.
       final results = await Future.wait([
@@ -128,13 +137,15 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
 
       if (!mounted) return;
 
-      setState(() {
+
         // -----------------------------------------------------
         // COMPANY / AGENCY NAME — now dynamic from UserModel/CompanyModel
         // -----------------------------------------------------
+      setState(() {
         _user = user;
-        _companyName = _extractCompanyName(user);
+        _userDataLoading = false;
 
+        _companyName = _extractCompanyName(user);
         _phones = _extractPhones(user);
 
         // Agar koi real number nahi hai, ek fallback number generate karo
@@ -146,7 +157,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
         _offlineRecords = offlineRecords;
         _syncCode = syncCode;
         _agencyTag = agencyTag;
-        _isOnline = isOnline;
+        //_isOnline = isOnline;
 
         // -----------------------------------------------------
         // API STATS
@@ -185,41 +196,166 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     }
   }
 
-  // =========================================================
-  // SEARCH — opens the premium bottom sheet, which handles its
-  // own loading state, fetching and result rendering.
-  // =========================================================
+  Future<void> _logout(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); // sara saved data clear (token, role, name, etc.)
 
-  void _searchCases(String query) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (!context.mounted) return;
 
-    showModalBottomSheet(
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const   LoginScreen()),
+          (route) => false, // pichla saara stack hata do
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: isDark ? const Color(0xff121A2E) : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.75,
-          minChildSize: 0.4,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (context, scrollController) {
-            return _SearchResultsSheet(
-              query: query,
-              isDark: isDark,
-            );
-          },
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(.55),
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.85, end: 1),
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutBack,
+            builder: (context, scale, child) {
+              return Transform.scale(scale: scale, child: child);
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(.25),
+                    blurRadius: 40,
+                    offset: const Offset(0, 20),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header with icon
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xff06162D), Color(0xff123B78)],
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 64,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withOpacity(.15),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: Colors.redAccent.withOpacity(.3),
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.logout_rounded,
+                              color: Colors.redAccent,
+                              size: 30,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Log Out',
+                            style: AppTextStyles.display(
+                              size: 19,
+                              weight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Are you sure you want to log out\nof your agency workspace?',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.body(
+                              size: 12.5,
+                              color: Colors.white.withOpacity(.65),
+                            ).copyWith(height: 1.5),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Actions
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                                side: BorderSide(color: AppColors.slate200),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: () => Navigator.of(dialogContext).pop(),
+                              child: Text(
+                                'Cancel',
+                                style: AppTextStyles.body(
+                                  size: 13.5,
+                                  weight: FontWeight.w700,
+                                  color: AppColors.slate600,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.redAccent,
+                                padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop(); // close dialog
+                                _logout(context); // do actual logout
+                              },
+                              child: const Text(
+                                'Log Out',
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
   }
-
-  // =========================================================
-  // HELPERS
-  // =========================================================
 
   String _generateRandomPhone() {
     final random =
@@ -399,6 +535,17 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     return Map<String, dynamic>.from(body['data'] ?? {});
   }
 
+
+  Future<void> toggleTheme(bool isDark) async {
+    themeNotifier.value =
+    isDark ? ThemeMode.dark : ThemeMode.light;
+
+    await SharedPreferenceService.setString(
+      'theme_mode',
+      isDark ? 'dark' : 'light',
+    );
+  }
+
   // =========================================================
   // API 3 — INVENTORY CONFIRMED
   // =========================================================
@@ -493,6 +640,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     return Scaffold(
       backgroundColor:
       isDark ? const Color(0xff080D18) : const Color(0xffF5F7FB),
+      drawer: _buildDrawer(),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadDashboardData,
@@ -510,10 +658,11 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                   children: [
                     _buildTopBar(isDark),
                     const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: _buildOnlineBadge(isDark),
-                    ),
+                    // Align(
+                    //   alignment: Alignment.centerRight,
+                    //   child:
+                    //   _buildOnlineBadge(isDark),
+                    // ),
                     const SizedBox(height: 22),
                     _buildHero(isDark),
                     const SizedBox(height: 26),
@@ -522,7 +671,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                     _buildActionsRow(isDark),
                     const SizedBox(height: 16),
                     _buildControlPanel(isDark),
-                    const SizedBox(height: 26),
+                    const SizedBox(height:100),
                     _buildFooter(isDark),
                   ],
                 ),
@@ -537,6 +686,474 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   // =========================================================
   // ICON BUTTON
   // =========================================================
+
+  Widget _buildDrawer() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final background =
+    isDark ? const Color(0xff0A1220) : const Color(0xffF8FAFC);
+
+    final cardColor =
+    isDark ? const Color(0xff111B2E) : Colors.white;
+
+    final primaryText =
+    isDark ? Colors.white : const Color(0xff0F172A);
+
+    final secondaryText =
+    isDark ? const Color(0xff8F9DB5) : const Color(0xff64748B);
+
+    final divider =
+    isDark ? Colors.white.withOpacity(.07) : const Color(0xffE8EDF3);
+
+    final drawerItems = [
+      (
+      icon: Icons.dashboard_rounded,
+      title: 'Dashboard',
+      ),
+      (
+      icon: Icons.directions_car_filled_rounded,
+      title: 'Find Vehicle',
+      ),
+      (
+      icon: Icons.badge_rounded,
+      title: 'ID Card',
+      ),
+      (
+      icon: Icons.person_rounded,
+      title: 'Profile',
+      ),
+    ];
+
+    return Drawer(
+      width: 292,
+      backgroundColor: background,
+      elevation: 20,
+      child: SafeArea(
+        child: Column(
+          children: [
+            // =================================================
+            // HEADER
+            // =================================================
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+              child: Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark
+                        ? [
+                      const Color(0xff13294B),
+                      const Color(0xff0E1A31),
+                    ]
+                        : [
+                      const Color(0xffEEF5FF),
+                      Colors.white,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withOpacity(.08)
+                        : const Color(0xffDDE7F3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // LOGO
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: AppColors.blueGradient,
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.blue600.withOpacity(.25),
+                            blurRadius: 14,
+                            offset: const Offset(0, 7),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.business_center_rounded,
+                        color: Colors.white,
+                        size: 23,
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    Expanded(
+                      child: _userDataLoading
+                          ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          _ShimmerBox(
+                            width: 130,
+                            height: 13,
+                          ),
+                          SizedBox(height: 7),
+                          _ShimmerBox(
+                            width: 80,
+                            height: 10,
+                          ),
+                        ],
+                      )
+                          : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _companyName.isNotEmpty
+                                ? _companyName
+                                : 'Your Agency',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w900,
+                              color: primaryText,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Agency Workspace',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: secondaryText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // =================================================
+            // MENU TITLE
+            // =================================================
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 4, 22, 9),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'MAIN MENU',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.1,
+                    color: secondaryText,
+                  ),
+                ),
+              ),
+            ),
+
+            // =================================================
+            // MENU ITEMS
+            // =================================================
+
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: drawerItems.length,
+                itemBuilder: (context, index) {
+                  final item = drawerItems[index];
+                  final active = index == _drawerIndex;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(15),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(15),
+                        onTap: () {
+                          setState(() {
+                            _drawerIndex = index;
+                          });
+
+                          Navigator.of(context).pop();
+
+                          if (item.title == 'Profile') {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ProfileScreen(),
+                              ),
+                            );
+                          } else if (item.title == 'ID Card') {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const IdCardPage(),
+                              ),
+                            );
+                          } else if (item.title == 'Dashboard') {
+                            // Already on dashboard.
+                          } else if (item.title == 'Find Vehicle') {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => HomeScreen(),
+                              ),
+                            );
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 220),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 13,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: active
+                                ? (isDark
+                                ? AppColors.blue600.withOpacity(.16)
+                                : AppColors.blue600.withOpacity(.08))
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(
+                              color: active
+                                  ? (isDark
+                                  ? AppColors.blue600.withOpacity(.35)
+                                  : AppColors.blue600.withOpacity(.18))
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: active
+                                      ? AppColors.blue600.withOpacity(.12)
+                                      : (isDark
+                                      ? Colors.white.withOpacity(.045)
+                                      : const Color(0xffF1F5F9)),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  item.icon,
+                                  size: 20,
+                                  color: active
+                                      ? (isDark
+                                      ? AppColors.gold400
+                                      : AppColors.blue600)
+                                      : secondaryText,
+                                ),
+                              ),
+
+                              const SizedBox(width: 12),
+
+                              Expanded(
+                                child: Text(
+                                  item.title,
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: active
+                                        ? FontWeight.w800
+                                        : FontWeight.w600,
+                                    color: active
+                                        ? primaryText
+                                        : secondaryText,
+                                  ),
+                                ),
+                              ),
+
+                              if (active)
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? AppColors.gold400
+                                        : AppColors.blue600,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // =================================================
+            // BOTTOM AREA
+            // =================================================
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Column(
+                children: [
+                  Divider(
+                    height: 1,
+                    color: divider,
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // DARK MODE
+                  Container(
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: divider),
+                    ),
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 13,
+                      ),
+                      leading: ValueListenableBuilder<ThemeMode>(
+                        valueListenable: themeNotifier,
+                        builder: (context, mode, _) {
+                          final dark = mode == ThemeMode.dark;
+
+                          return Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: dark
+                                  ? AppColors.gold400.withOpacity(.12)
+                                  : AppColors.blue600.withOpacity(.08),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              dark
+                                  ? Icons.dark_mode_rounded
+                                  : Icons.light_mode_rounded,
+                              size: 19,
+                              color: dark
+                                  ? AppColors.gold400
+                                  : AppColors.blue600,
+                            ),
+                          );
+                        },
+                      ),
+                      title: Text(
+                        'Dark Mode',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: primaryText,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Appearance',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: secondaryText,
+                        ),
+                      ),
+                      trailing: ValueListenableBuilder<ThemeMode>(
+                        valueListenable: themeNotifier,
+                        builder: (context, mode, _) {
+                          final dark = mode == ThemeMode.dark;
+
+                          return Switch(
+                            value: dark,
+                            activeColor: AppColors.gold400,
+                            activeTrackColor:
+                            AppColors.gold400.withOpacity(.25),
+                            inactiveThumbColor: AppColors.blue600,
+                            inactiveTrackColor:
+                            AppColors.blue600.withOpacity(.12),
+                            onChanged: toggleTheme,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // LOGOUT
+                  Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(15),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(15),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        _showLogoutDialog(context);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 13,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withOpacity(.06),
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(
+                            color: Colors.redAccent.withOpacity(.12),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent.withOpacity(.10),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.logout_rounded,
+                                size: 19,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Logout',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark
+                                      ? Colors.redAccent.shade100
+                                      : Colors.redAccent,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 12,
+                              color: Colors.redAccent.withOpacity(.7),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  Text(
+                    'FastRecovery • ${DateTime.now().year}',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: secondaryText.withOpacity(.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _iconButton({
     required IconData icon,
@@ -562,45 +1179,45 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   // ONLINE
   // =========================================================
 
-  Widget _buildOnlineBadge(bool isDark) {
-    final color =
-    _isOnline ? const Color(0xff10B981) : const Color(0xff94A3B8);
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withOpacity(.10),
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: color.withOpacity(.20)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: color.withOpacity(.45), blurRadius: 7),
-              ],
-            ),
-          ),
-          const SizedBox(width: 7),
-          Text(
-            _isOnline ? 'Online' : 'Offline',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // Widget _buildOnlineBadge(bool isDark) {
+  //   final color =
+  //   _isOnline ? const Color(0xff10B981) : const Color(0xff94A3B8);
+  //
+  //   return AnimatedContainer(
+  //     duration: const Duration(milliseconds: 300),
+  //     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+  //     decoration: BoxDecoration(
+  //       color: color.withOpacity(.10),
+  //       borderRadius: BorderRadius.circular(30),
+  //       border: Border.all(color: color.withOpacity(.20)),
+  //     ),
+  //     child: Row(
+  //       mainAxisSize: MainAxisSize.min,
+  //       children: [
+  //         Container(
+  //           width: 7,
+  //           height: 7,
+  //           decoration: BoxDecoration(
+  //             color: color,
+  //             shape: BoxShape.circle,
+  //             boxShadow: [
+  //               BoxShadow(color: color.withOpacity(.45), blurRadius: 7),
+  //             ],
+  //           ),
+  //         ),
+  //         const SizedBox(width: 7),
+  //         Text(
+  //           _isOnline ? 'Online' : 'Offline',
+  //           style: TextStyle(
+  //             fontSize: 11,
+  //             fontWeight: FontWeight.w800,
+  //             color: color,
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   // =========================================================
   // PREMIUM HERO
@@ -828,6 +1445,9 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
             value: _remainingDays,
             accent: AppColors.blue600,
             icon: Icons.calendar_month_rounded,
+            onTap: (){},
+            color: AppColors.blue600,
+            subtitle: 'Days',
           ),
         ),
         const SizedBox(width: 12),
@@ -838,6 +1458,9 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
             value: _offlineRecords,
             accent: AppColors.gold400,
             icon: Icons.cloud_off_rounded,
+            onTap: (){},
+            color: AppColors.blue600,
+            subtitle: "Record",
           ),
         ),
       ],
@@ -850,109 +1473,88 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     required int value,
     required Color accent,
     required IconData icon,
+    required VoidCallback onTap,
+    required Color color,
+    required String subtitle,
   }) {
     final bg = isDark ? const Color(0xff10182A) : Colors.white;
     final border = isDark ? const Color(0xff24304A) : const Color(0xffE5EAF2);
     final labelColor =
     isDark ? const Color(0xff8A97B0) : const Color(0xff64748B);
     final valueColor = isDark ? Colors.white : const Color(0xff0F172A);
+    final textColor = isDark ? Colors.white : const Color(0xff0F172A);
+    final muted = isDark ? const Color(0xff7F8BA4) : const Color(0xff64748B);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bg,
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? .24 : .045),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? .23 : .04),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+          child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: accent.withOpacity(.11),
-                  borderRadius: BorderRadius.circular(11),
+                  color: color.withOpacity(.11),
+                  borderRadius: BorderRadius.circular(13),
                 ),
-                child: Icon(icon, color: accent, size: 18),
+                child: Icon(icon, color: color, size: 21),
               ),
-              const Spacer(),
-              Container(
-                width: 5,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: accent,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(color: accent.withOpacity(.45), blurRadius: 6),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w500,
+                        color: muted,
+                      ),
+                    ),
+                    //const SizedBox(height: 5),
+                    _AnimatedNumber(
+                      value: _loading ? 0
+                          : value, color:
+                    valueColor,
+                      fontSize: 15,
+                    ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: labelColor,
-            ),
-          ),
-          const SizedBox(height: 5),
-          _AnimatedNumber(
-            value: _loading ? 0 : value,
-            color: valueColor,
-            fontSize: 25,
-          ),
-        ],
+        ),
       ),
-    );
-  }
-
-  // =========================================================
-  // ACTIONS
-  // =========================================================
-
-  Widget _buildActionsRow(bool isDark) {
-    return Row(
-      children: [
-        Expanded(
-          child: _premiumActionCard(
-            isDark: isDark,
-            icon: Icons.person_rounded,
-            label: 'My Account',
-            subtitle: 'Profile',
-            color: AppColors.blue600,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ProfileScreen()),
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _premiumActionCard(
-            isDark: isDark,
-            icon: Icons.directions_car_rounded,
-            label: 'V. Confirmed',
-            subtitle: 'Vehicles',
-            color: const Color(0xff059669),
-            onTap: () {},
-          ),
-        ),
-      ],
     );
   }
 
@@ -1034,11 +1636,14 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     );
   }
 
-  // =========================================================
-  // CONTROL PANEL
-  // =========================================================
-
-  Widget _buildControlPanel(bool isDark) {
+  Widget _panelCard({
+    required bool isDark,
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
     final bg = isDark ? const Color(0xff10182A) : Colors.white;
     final border = isDark ? const Color(0xff24304A) : const Color(0xffE5EAF2);
     final textColor = isDark ? Colors.white : const Color(0xff0F172A);
@@ -1048,11 +1653,10 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
-        onTap: () {},
+        onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        splashColor: AppColors.gold400.withOpacity(.10),
         child: Container(
-          padding: const EdgeInsets.all(17),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(20),
@@ -1068,34 +1672,32 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
           child: Row(
             children: [
               Container(
-                width: 48,
-                height: 48,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.gold400.withOpacity(.12),
-                  borderRadius: BorderRadius.circular(14),
+                  color: color.withOpacity(.11),
+                  borderRadius: BorderRadius.circular(13),
                 ),
-                child: const Icon(
-                  Icons.admin_panel_settings_rounded,
-                  color: AppColors.gold400,
-                  size: 23,
-                ),
+                child: Icon(icon, color: color, size: 21),
               ),
-              const SizedBox(width: 13),
+              const SizedBox(width: 11),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Control Panel',
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w800,
                         color: textColor,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Text(
-                      'Manage agency settings',
+                      subtitle,
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w500,
@@ -1105,12 +1707,82 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios_rounded, size: 14, color: muted),
             ],
           ),
         ),
       ),
     );
+  }
+  // =========================================================
+  // ACTIONS
+  // =========================================================
+
+  Widget _buildActionsRow(bool isDark) {
+    return Row(
+      children: [
+        Expanded(
+          child: _premiumActionCard(
+            isDark: isDark,
+            icon: Icons.person_rounded,
+            label: 'My Account',
+            subtitle: 'Profile',
+            color: AppColors.blue600,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ProfileScreen()),
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _premiumActionCard(
+            isDark: isDark,
+            icon: Icons.directions_car_rounded,
+            label: 'V. Confirmed',
+            subtitle: 'Vehicles',
+            color: AppColors.blue600,
+            onTap: () {},
+          ),
+        ),
+      ],
+    );
+  }
+
+  // =========================================================
+  // CONTROL PANEL
+  // =========================================================
+
+  Widget _buildControlPanel(bool isDark) {
+    final bg = isDark ? const Color(0xff10182A) : Colors.white;
+    final border = isDark ? const Color(0xff24304A) : const Color(0xffE5EAF2);
+    final textColor = isDark ? Colors.white : const Color(0xff0F172A);
+    final muted = isDark ? const Color(0xff7F8BA4) : const Color(0xff64748B);
+
+    return
+      Row(
+        children: [
+              Expanded(
+                child: _panelCard(isDark: isDark,
+                    icon: Icons.admin_panel_settings_rounded,
+                    label: 'Control Panel',
+                    subtitle: 'Manage agency settings',
+                  color: AppColors.blue600,
+                    onTap: (){},
+                ),
+              ),
+          const SizedBox(width: 12),
+        Expanded(
+          child: _panelCard(isDark: isDark,
+            icon: Icons.admin_panel_settings_rounded,
+            label: 'Control Panel',
+            subtitle: 'Manage agency settings',
+            color: AppColors.blue600,
+            onTap: (){},
+          ),
+        ),
+    ]);
   }
 
   // =========================================================
@@ -1175,163 +1847,158 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   // =========================================================
 
   Widget _buildTopBar(bool isDark) {
-    final bg = isDark ? const Color(0xff11182A) : Colors.white;
-    final border = isDark ? const Color(0xff222D46) : const Color(0xffE5EAF2);
-    final textColor = isDark ? Colors.white : const Color(0xff0F172A);
+    final bg = isDark ? const Color(0xff0F1728) : Colors.white;
+    final border =
+    isDark ? const Color(0xff263550) : const Color(0xffE5EAF2);
+    final textColor =
+    isDark ? Colors.white : const Color(0xff0F172A);
 
     return Container(
-      height: 58,
-      padding: const EdgeInsets.symmetric(horizontal: 7),
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? .28 : .055),
-            blurRadius: 20,
+            color: Colors.black.withOpacity(isDark ? .22 : .045),
+            blurRadius: 22,
             offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Row(
         children: [
-          _iconButton(
-            icon: Icons.arrow_back_rounded,
-            color: textColor,
-            onTap: () {
-              Navigator.of(context).maybePop();
-            },
-          ),
-          const SizedBox(width: 20),
-
-          Text(
-            "Dashboard",
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: textColor,
-            ),
-          ),
-
-          const Spacer(),
-
-          _iconButton(
-            icon: Icons.search,
-            color: textColor,
-            onTap: () async {
-              final query = await showDialog<String>(
-                context: context,
-                builder: (context) {
-                  final controller = TextEditingController();
-                  return AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+          // MENU
+          Builder(
+            builder: (menuContext) {
+              return Material(
+                color: Colors.transparent,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () {
+                    Scaffold.of(menuContext).openDrawer();
+                  },
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withOpacity(.06)
+                          : const Color(0xffF3F6FA),
+                      shape: BoxShape.circle,
                     ),
-                    backgroundColor:
-                    isDark ? const Color(0xff10182A) : Colors.white,
-                    title: const Text(
-                      "🔍 Premium Search",
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    child: Icon(
+                      Icons.menu_rounded,
+                      size: 22,
+                      color: textColor,
                     ),
-                    content: TextField(
-                      controller: controller,
-                      maxLength: 4, // सिर्फ 4 digit
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        hintText: "Enter last 4 digits",
-                        counterText: "",
-                        prefixIcon: Icon(Icons.dialpad),
-                      ),
-                    ),
-                    actions: [
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.blue600,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () =>
-                            Navigator.pop(context, controller.text.trim()),
-                        child: const Text("Search"),
-                      ),
-                    ],
-                  );
-                },
+                  ),
+                ),
               );
-
-              if (query != null && query.isNotEmpty && query.length == 4) {
-                _searchCases(query);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Please enter 4 digits")),
-                );
-              }
             },
+          ),
+
+          const SizedBox(width: 12),
+
+          // LOGO
+          Expanded(
+            child: Row(
+              children: [
+                Image.asset(
+                  "assets/images/fastrecovery_logo-2.png",
+                  width: 125,
+                  height: 38,
+                  fit: BoxFit.contain,
+                  alignment: Alignment.centerLeft,
+                ),
+
+                const SizedBox(width: 10),
+
+                Container(
+                  width: 1,
+                  height: 27,
+                  color: isDark
+                      ? Colors.white.withOpacity(.10)
+                      : const Color(0xffE2E8F0),
+                ),
+
+                const SizedBox(width: 10),
+
+                Expanded(
+                  child: Text(
+                    'Dashboard',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -.2,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
-
   Widget _buildFooter(bool isDark) {
     final mutedText =
     isDark ? const Color(0xff6B7893) : const Color(0xff94A3B8);
-    final brandColor = isDark ? Colors.white : const Color(0xff0F172A);
+
     final currentYear = DateTime.now().year;
 
     return Column(
+      // mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
           'Developed By: Software Solutions Development India',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w900,
-            color: mutedText,
+          style: const TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
           ),
         ),
-        const SizedBox(height: 10),
+
+        const SizedBox(height: 8),
+
         Wrap(
           alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 14,
-          runSpacing: 2,
+          runSpacing: 4,
           children: [
-            _footerLink(
-              icon: Icons.language_rounded,
-              label: 'www.ssdi.co.in',
-              url: 'https://www.ssdi.co.in/',
-              isDark: isDark,
-            ),
             _footerLink(
               icon: Icons.call_rounded,
               label: '+91 8796814100',
               url: 'tel:+918796814100',
               isDark: isDark,
             ),
+
             _footerLink(
               icon: Icons.call_rounded,
               label: '+91 8796824100',
               url: 'tel:+918796824100',
               isDark: isDark,
             ),
-            // _footerLink(
-            //   icon: Icons.mail_outline_rounded,
-            //   label: 'fastrecovery26@gmail.com',
-            //   url: 'mailto:fastrecovery26@gmail.com',
-            //   isDark: isDark,
-            // ),
           ],
         ),
-        const SizedBox(height: 10),
+
+        const SizedBox(height: 8),
+
         Text(
-          '© $currentYear '
-          //'FastRecovery.'
-              ' All rights reserved.',
+          'Copyright © $currentYear SSDI All rights reserved.',
+          textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 10,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.bold,
             color: mutedText,
           ),
         ),
@@ -1452,281 +2119,279 @@ class _ShimmerChipState extends State<_ShimmerChip>
 // A → Z by customer name. Tapping a card opens a details popup.
 // =============================================================
 
-class _SearchResultsSheet extends StatefulWidget {
-  final String query;
-  final bool isDark;
-
-  const _SearchResultsSheet({
-    required this.query,
-    required this.isDark,
-  });
-
-  @override
-  State<_SearchResultsSheet> createState() => _SearchResultsSheetState();
-}
-
-class _SearchResultsSheetState extends State<_SearchResultsSheet> {
-  bool _loading = true;
-  List<Map<String, dynamic>> _items = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _fetch();
-  }
-
-  Future<void> _fetch() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-
-      final headers = {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${token ?? ''}',
-      };
-
-      final url = Uri.parse(
-        'https://www.fastrecovery.in/api/repo-cases?search=${widget
-            .query}&type=vehicleNumber&page=1&limit=50',
-      );
-
-      final response = await http.get(url, headers: headers);
-
-      if (!mounted) return;
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final items = (data['items'] as List? ?? [])
-            .whereType<Map>()
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
-
-        setState(() {
-          _items = items;
-          _loading = false;
-        });
-      } else {
-        setState(() => _loading = false);
-      }
-    } catch (e) {
-      debugPrint('Search sheet error: $e');
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
-  }
-
-  void _openDetails(Map<String, dynamic> item) {
-    Navigator.of(context).pop(); // close sheet first
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(.55),
-      builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 30),
-          child: _VehicleDetailsPopupMini(item: item),
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = widget.isDark;
-
-    // A → Z sort by customerName (empty/null names go to the end)
-    final sorted = List<Map<String, dynamic>>.from(_items)
-      ..sort((a, b) {
-        final nameA = (a['customerName']?.toString().trim() ?? '');
-        final nameB = (b['customerName']?.toString().trim() ?? '');
-        if (nameA.isEmpty && nameB.isEmpty) return 0;
-        if (nameA.isEmpty) return 1;
-        if (nameB.isEmpty) return -1;
-        return nameA.toLowerCase().compareTo(nameB.toLowerCase());
-      });
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // drag handle
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 14),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.white24 : Colors.black12,
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
-          Row(
-            children: [
-              Icon(Icons.search_rounded, size: 18, color: AppColors.blue600),
-              const SizedBox(width: 8),
-              Text(
-                _loading
-                    ? 'SEARCHING...'
-                    : '${sorted.length} MATCH${sorted.length == 1
-                    ? ''
-                    : 'ES'} FOUND  •  A–Z',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: .6,
-                  color: isDark ? Colors.white54 : const Color(0xff64748B),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: _loading
-                ? _buildSkeletonGrid(isDark)
-                : sorted.isEmpty
-                ? _buildEmpty(isDark)
-                : GridView.builder(
-              itemCount: sorted.length,
-              gridDelegate:
-              const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 0.86,
-              ),
-              itemBuilder: (context, index) {
-                final item = sorted[index];
-
-                final vehicleNumber =
-                item['vehicleNumber']?.toString().trim();
-                final chassisNumber =
-                item['chassisNumber']?.toString().trim();
-                final customerName =
-                item['customerName']?.toString().trim();
-                final bankName = item['bankName']?.toString().trim();
-                final status = item['repoStatus']?.toString().trim();
-
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: sorted.map((item) {
-                    final vehicleNumber =
-                        item['vehicleNumber']?.toString().trim() ?? '';
-
-                    final chassisNumber =
-                        item['chassisNumber']?.toString().trim() ?? '';
-
-                    final number = vehicleNumber.isNotEmpty
-                        ? vehicleNumber
-                        : chassisNumber.isNotEmpty
-                        ? chassisNumber
-                        : '—';
-
-                    return _resultCard(
-                      isDark: isDark,
-                      number: number,
-                      onTap: () => _openDetails(item),
-                    );
-                  }).toList(),
-                );
-
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmpty(bool isDark) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.search_off_rounded,
-              size: 40, color: isDark ? Colors.white24 : Colors.black26),
-          const SizedBox(height: 10),
-          Text(
-            'No matches found',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white54 : const Color(0xff64748B),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSkeletonGrid(bool isDark) {
-    return GridView.builder(
-      itemCount: 6,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 0.86,
-      ),
-      itemBuilder: (context, index) => _SkeletonMiniCard(isDark: isDark),
-    );
-  }
-
-  Widget _resultCard({
-    required bool isDark,
-    required String number,
-    required VoidCallback onTap,
-  }) {
-    final bg = isDark ? const Color(0xff151F32) : Colors.white;
-    final border =
-    isDark ? const Color(0xff273449) : const Color(0xffE5EAF2);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 10,
-          ),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                number,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.blue600,
-                  letterSpacing: .3,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 12,
-                color: isDark
-                    ? Colors.white38
-                    : const Color(0xff94A3B8),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+// class _SearchResultsSheet extends StatefulWidget {
+//   final String query;
+//   final bool isDark;
+//
+//   const _SearchResultsSheet({
+//     required this.query,
+//     required this.isDark,
+//   });
+//
+//   @override
+//   State<_SearchResultsSheet> createState() => _SearchResultsSheetState();
+// }
+//
+// class _SearchResultsSheetState extends State<_SearchResultsSheet> {
+//   bool _loading = true;
+//   List<Map<String, dynamic>> _items = [];
+//
+//   @override
+//   void initState() {
+//     super.initState();
+//     _fetch();
+//   }
+//
+//   Future<void> _fetch() async {
+//     try {
+//       final prefs = await SharedPreferences.getInstance();
+//       final token = prefs.getString('token');
+//
+//       final headers = {
+//         'Content-Type': 'application/json',
+//         'Authorization': 'Bearer ${token ?? ''}',
+//       };
+//
+//       final url = Uri.parse(
+//         'https://www.fastrecovery.in/api/repo-cases?search=${widget
+//             .query}&type=vehicleNumber&page=1&limit=50',
+//       );
+//
+//       final response = await http.get(url, headers: headers);
+//
+//       if (!mounted) return;
+//
+//       if (response.statusCode == 200) {
+//         final data = jsonDecode(response.body);
+//         final items = (data['items'] as List? ?? [])
+//             .whereType<Map>()
+//             .map((e) => Map<String, dynamic>.from(e))
+//             .toList();
+//
+//         setState(() {
+//           _items = items;
+//           _loading = false;
+//         });
+//       } else {
+//         setState(() => _loading = false);
+//       }
+//     } catch (e) {
+//       debugPrint('Search sheet error: $e');
+//       if (!mounted) return;
+//       setState(() => _loading = false);
+//     }
+//   }
+//
+//   void _openDetails(Map<String, dynamic> item) {
+//     Navigator.of(context).pop(); // close sheet first
+//     showDialog(
+//       context: context,
+//       barrierDismissible: true,
+//       barrierColor: Colors.black.withOpacity(.55),
+//       builder: (context) {
+//         return Dialog(
+//           backgroundColor: Colors.transparent,
+//           insetPadding:
+//           const EdgeInsets.symmetric(horizontal: 10, vertical: 30),
+//           child: _VehicleDetailsPopupMini(item: item),
+//         );
+//       },
+//     );
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final isDark = widget.isDark;
+//     // A → Z sort by customerName (empty/null names go to the end)
+//     final sorted = List<Map<String, dynamic>>.from(_items)
+//       ..sort((a, b) {
+//         final nameA = (a['customerName']?.toString().trim() ?? '');
+//         final nameB = (b['customerName']?.toString().trim() ?? '');
+//         if (nameA.isEmpty && nameB.isEmpty) return 0;
+//         if (nameA.isEmpty) return 1;
+//         if (nameB.isEmpty) return -1;
+//         return nameA.toLowerCase().compareTo(nameB.toLowerCase());
+//       });
+//
+//     return Padding(
+//       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+//       child: Column(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         children: [
+//           // drag handle
+//           Center(
+//             child: Container(
+//               width: 40,
+//               height: 4,
+//               margin: const EdgeInsets.only(bottom: 14),
+//               decoration: BoxDecoration(
+//                 color: isDark ? Colors.white24 : Colors.black12,
+//                 borderRadius: BorderRadius.circular(10),
+//               ),
+//             ),
+//           ),
+//           Row(
+//             children: [
+//               Icon(Icons.search_rounded, size: 18, color: AppColors.blue600),
+//               const SizedBox(width: 8),
+//               Text(
+//                 _loading
+//                     ? 'SEARCHING...'
+//                     : '${sorted.length} MATCH${sorted.length == 1
+//                     ? ''
+//                     : 'ES'} FOUND  •  A–Z',
+//                 style: TextStyle(
+//                   fontSize: 11,
+//                   fontWeight: FontWeight.w800,
+//                   letterSpacing: .6,
+//                   color: isDark ? Colors.white54 : const Color(0xff64748B),
+//                 ),
+//               ),
+//             ],
+//           ),
+//           const SizedBox(height: 12),
+//           Expanded(
+//             child: _loading
+//                 ? _buildSkeletonGrid(isDark)
+//                 : sorted.isEmpty
+//                 ? _buildEmpty(isDark)
+//                 : GridView.builder(
+//               itemCount: sorted.length,
+//               gridDelegate:
+//               const SliverGridDelegateWithFixedCrossAxisCount(
+//                 crossAxisCount: 2,
+//                 crossAxisSpacing: 10,
+//                 mainAxisSpacing: 10,
+//                 childAspectRatio: 0.86,
+//               ),
+//               itemBuilder: (context, index) {
+//                 final item = sorted[index];
+//
+//                 final vehicleNumber =
+//                 item['vehicleNumber']?.toString().trim();
+//                 final chassisNumber =
+//                 item['chassisNumber']?.toString().trim();
+//                 final customerName =
+//                 item['customerName']?.toString().trim();
+//                 final bankName = item['bankName']?.toString().trim();
+//                 final status = item['repoStatus']?.toString().trim();
+//                 Wrap(
+//                   spacing: 10,
+//                   runSpacing: 10,
+//                   children: sorted.map((item) {
+//                     final vehicleNumber =
+//                         item['vehicleNumber']?.toString().trim() ?? '';
+//
+//                     final chassisNumber =
+//                         item['chassisNumber']?.toString().trim() ?? '';
+//
+//                     final number = vehicleNumber.isNotEmpty
+//                         ? vehicleNumber
+//                         : chassisNumber.isNotEmpty
+//                         ? chassisNumber
+//                         : '—';
+//
+//                     return _resultCard(
+//                       isDark: isDark,
+//                       number: number,
+//                       onTap: () => _openDetails(item),
+//                     );
+//                   }).toList(),
+//                 );
+//
+//               },
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+//
+//   Widget _buildEmpty(bool isDark) {
+//     return Center(
+//       child: Column(
+//         mainAxisSize: MainAxisSize.min,
+//         children: [
+//           Icon(Icons.search_off_rounded,
+//               size: 40, color: isDark ? Colors.white24 : Colors.black26),
+//           const SizedBox(height: 10),
+//           Text(
+//             'No matches found',
+//             style: TextStyle(
+//               fontSize: 13,
+//               fontWeight: FontWeight.w600,
+//               color: isDark ? Colors.white54 : const Color(0xff64748B),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+//
+//   Widget _buildSkeletonGrid(bool isDark) {
+//     return GridView.builder(
+//       itemCount: 6,
+//       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+//         crossAxisCount: 2,
+//         crossAxisSpacing: 10,
+//         mainAxisSpacing: 10,
+//         childAspectRatio: 0.86,
+//       ),
+//       itemBuilder: (context, index) => _SkeletonMiniCard(isDark: isDark),
+//     );
+//   }
+//
+//   Widget _resultCard({
+//     required bool isDark,
+//     required String number,
+//     required VoidCallback onTap,
+//   }) {
+//     final bg = isDark ? const Color(0xff151F32) : Colors.white;
+//     final border =
+//     isDark ? const Color(0xff273449) : const Color(0xffE5EAF2);
+//
+//     return Material(
+//       color: Colors.transparent,
+//       child: InkWell(
+//         onTap: onTap,
+//         borderRadius: BorderRadius.circular(12),
+//         child: Ink(
+//           padding: const EdgeInsets.symmetric(
+//             horizontal: 12,
+//             vertical: 10,
+//           ),
+//           decoration: BoxDecoration(
+//             color: bg,
+//             borderRadius: BorderRadius.circular(12),
+//             border: Border.all(color: border),
+//           ),
+//           child: Row(
+//             mainAxisSize: MainAxisSize.min,
+//             children: [
+//               Text(
+//                 number,
+//                 style: TextStyle(
+//                   fontSize: 13,
+//                   fontWeight: FontWeight.w800,
+//                   color: AppColors.blue600,
+//                   letterSpacing: .3,
+//                 ),
+//               ),
+//               const SizedBox(width: 8),
+//               Icon(
+//                 Icons.arrow_forward_ios_rounded,
+//                 size: 12,
+//                 color: isDark
+//                     ? Colors.white38
+//                     : const Color(0xff94A3B8),
+//               ),
+//             ],
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }
 // =============================================================
 // SKELETON MINI CARD — used inside the search bottom sheet
 // while results are loading.
@@ -1858,71 +2523,123 @@ class _SkeletonMiniCardState extends State<_SkeletonMiniCard>
 // MINI VEHICLE DETAILS POPUP — opened from a search result card.
 // =============================================================
 
-class _VehicleDetailsPopupMini extends StatelessWidget {
-  final Map<String, dynamic> item;
-  const _VehicleDetailsPopupMini({required this.item});
+// class _VehicleDetailsPopupMini extends StatelessWidget {
+//   final Map<String, dynamic> item;
+//   const _VehicleDetailsPopupMini({required this.item});
+//
+//   String _value(String key) {
+//     final value = item[key];
+//     if (value == null) return '-';
+//     final text = value.toString();
+//     if (text.isEmpty || text == 'null') return '-';
+//     return text;
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Container(
+//       width: MediaQuery.of(context).size.width * .94,
+//       constraints:
+//       BoxConstraints(maxHeight: MediaQuery.of(context).size.height * .8),
+//       decoration: BoxDecoration(
+//         color: const Color(0xffF8FAFC),
+//         borderRadius: BorderRadius.circular(24),
+//       ),
+//       child: SingleChildScrollView(
+//         padding: const EdgeInsets.all(20),
+//         child: Column(
+//           crossAxisAlignment: CrossAxisAlignment.start,
+//           children: [
+//             Text(_value('vehicleNumber'),
+//                 style:
+//                 const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+//             const SizedBox(height: 4),
+//             Text(_value('customerName'),
+//                 style: const TextStyle(fontSize: 14, color: Colors.black54)),
+//             const Divider(height: 24),
+//             _row('Chassis', _value('chassisNumber')),
+//             _row('Bank', _value('bankName')),
+//             _row('Loan Account', _value('loanAccountNumber')),
+//             _row('Status', _value('repoStatus')),
+//             const SizedBox(height: 12),
+//             SizedBox(
+//               width: double.infinity,
+//               child: ElevatedButton(
+//                 onPressed: () => Navigator.of(context).pop(),
+//                 child: const Text('Close'),
+//               ),
+//             ),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+//
+//   Widget _row(String label, String value) {
+//     return Padding(
+//       padding: const EdgeInsets.symmetric(vertical: 6),
+//       child: Row(
+//         children: [
+//           Expanded(
+//             child: Text(label,
+//                 style: const TextStyle(
+//                     fontWeight: FontWeight.w600, color: Colors.black54)),
+//           ),
+//           Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+//         ],
+//       ),
+//     );
+//   }
+// }
 
-  String _value(String key) {
-    final value = item[key];
-    if (value == null) return '-';
-    final text = value.toString();
-    if (text.isEmpty || text == 'null') return '-';
-    return text;
+class _ShimmerBox extends StatefulWidget {
+  final double width;
+  final double height;
+  final BorderRadius? radius;
+
+  const _ShimmerBox({
+    required this.width,
+    required this.height,
+    this.radius,
+  });
+
+  @override
+  State<_ShimmerBox> createState() => _ShimmerBoxState();
+}
+
+class _ShimmerBoxState extends State<_ShimmerBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: MediaQuery.of(context).size.width * .94,
-      constraints:
-      BoxConstraints(maxHeight: MediaQuery.of(context).size.height * .8),
-      decoration: BoxDecoration(
-        color: const Color(0xffF8FAFC),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_value('vehicleNumber'),
-                style:
-                const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 4),
-            Text(_value('customerName'),
-                style: const TextStyle(fontSize: 14, color: Colors.black54)),
-            const Divider(height: 24),
-            _row('Chassis', _value('chassisNumber')),
-            _row('Bank', _value('bankName')),
-            _row('Loan Account', _value('loanAccountNumber')),
-            _row('Status', _value('repoStatus')),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(label,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600, color: Colors.black54)),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          width: widget.width,
+          height: widget.height,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.10 + (_controller.value * 0.14)),
+            borderRadius: widget.radius ?? BorderRadius.circular(8),
           ),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
-        ],
-      ),
+        );
+      },
     );
   }
 }

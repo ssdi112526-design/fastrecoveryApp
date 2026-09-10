@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:kartikrepoagency/Dashboard.dart';
 import 'Service/SharedPreferenceService.dart';
 import 'Splash_screen/Splash_screen.dart';
 import 'Auth/Login/Login_page.dart';
-import 'Screen/home.dart';
 
 // Global theme notifier
-final ValueNotifier<ThemeMode> themeNotifier =
-ValueNotifier(ThemeMode.light);
+ final ValueNotifier<ThemeMode> themeNotifier =
+ ValueNotifier(ThemeMode.light);
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  Future<void> main() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize SharedPreferences
   await SharedPreferenceService.init();
@@ -49,7 +49,7 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
 
-          title: 'Kartik Repossession Agency',
+          title: 'Fast Recovery',
 
           themeMode: currentMode,
 
@@ -83,7 +83,7 @@ class MyApp extends StatelessWidget {
           routes: {
             '/splash': (_) => const SplashScreen(),
             '/login': (_) => const LoginScreen(),
-            '/home': (_) => const HomeScreen(),
+            '/home': (_) => const AgencyDashboardPage(),
           },
 
           // App always starts from Splash

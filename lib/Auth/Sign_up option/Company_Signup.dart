@@ -279,14 +279,116 @@ class _SignupScreenState extends State<SignupScreen> {
       backgroundColor: AppColors.paper,
       body: SafeArea(
         bottom: false,
-        child: Column(
+        child:
+        Column(
           children: [
-            AuthHero(
-              title: 'Create account',
-              subtitle: 'Register your agency to get started',
-              showBack: true,
-              onBack: () => Navigator.of(context).pop(),
+            Container(
+              width: double.infinity,
+              height: 150,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    // Color(0xFF38B6FF),
+                    // Color(0xFF1D3FAE),
+                    // Color(0xFF1D3FAE),
+                    Color(0xFFFFFFFF),
+                    Color(0xFFFFFFFF),
+                    Color(0xFFFFFFFF),
+                  ],
+                ),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(28),
+                  bottomRight: Radius.circular(28),
+                ),
+              ),
+              child: Stack(
+                children: [
+                  // =========================
+                  // BACK BUTTON
+                  // =========================
+                  Positioned(
+                    top: 14,
+                    left: 16,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                        },
+                        child: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF4F7FC),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: AppColors.slate200,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.arrow_back_rounded,
+                            size: 21,
+                            color: Color(0xFF0C1220),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // =========================
+                  // CENTER CONTENT
+                  // =========================
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 30, 20, 10),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // LOGO
+                          // Center(
+                          //   child: Image.asset(
+                          //     "assets/images/fastrecovery_logo.png",
+                          //     width: 230,
+                          //     fit: BoxFit.contain,
+                          //   ),
+                          // ),
+
+                          //const SizedBox(height: 6),
+
+                          // TITLE
+                          // Text(
+                          //   'Create Account',
+                          //   textAlign: TextAlign.center,
+                          //   style: AppTextStyles.body(
+                          //     size: 24,
+                          //     weight: FontWeight.w700,
+                          //     color: const Color(0xFFFFFFFF),
+                          //   ),
+                          // ),
+                          Image.asset("assets/images/fastrecovery_logo-2.png",height: 50,),
+
+                          const SizedBox(height: 3),
+
+                          // SUBTITLE
+                          Text(
+                            'Create your company account to get started',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color:  Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
