@@ -474,27 +474,27 @@ class _LoginScreenState extends State<LoginScreen> {
           const SizedBox(height: 10),
 
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Row(
-                children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: Checkbox(
-                      value: _remember,
-                      onChanged: (value) => setState(() => _remember = value ?? false),
-                      activeColor: _blueEnd,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Remember me',
-                    style: AppTextStyles.body(size: 13, color: AppColors.slate600),
-                  ),
-                ],
-              ),
+              // Row(
+              //   children: [
+              //     SizedBox(
+              //       width: 20,
+              //       height: 20,
+              //       child: Checkbox(
+              //         value: _remember,
+              //         onChanged: (value) => setState(() => _remember = value ?? false),
+              //         activeColor: _blueEnd,
+              //         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              //       ),
+              //     ),
+              //     const SizedBox(width: 8),
+                  // Text(
+                  //   'Remember me',
+                  //   style: AppTextStyles.body(size: 13, color: AppColors.slate600),
+                  // ),
+              //   ],
+              // ),
               TextButton(
                 onPressed: () {
                   Navigator.of(context).push(
@@ -558,101 +558,110 @@ class _LoginScreenState extends State<LoginScreen> {
   // UI
   // =========================
   @override
+  // =========================
+  // UI
+  // =========================
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FC),
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         bottom: false,
-        child: Column(
+        child: Stack(
           children: [
-            // =========================
-            // HEADER
-            // =========================
-            Container(
-              width: double.infinity,
-              height: 200,
-              decoration:  BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white,
-                    Color(0xFFFFFFFF),
-                    Colors.white,
-                  ],
-                ),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(28),
-                  bottomRight: Radius.circular(28),
-                ),
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Image.asset(
-                      "assets/images/fastrecovery_logo-2.png",
-                      width: 230,
-                      //height: 70,
-                      fit: BoxFit.contain,
-                      alignment: Alignment.center,
+            Column(
+              children: [
+                // =========================
+                // HEADER
+                // =========================
+                Container(
+                  width: double.infinity,
+                  height: 200,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white,
+                        Color(0xFFFFFFFF),
+                        Colors.white,
+                      ],
                     ),
-
-                    const SizedBox(height: 4),
-
-                    Text(
-                      _selectedTab == _AuthTab.login
-                          ? 'Sign in to your agency workspace '
-                          : 'Register your company or join with a code',
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.body(
-                        size: 18.5,
-                        color: Colors.black.withOpacity(0.70),
-                      ),
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(28),
+                      bottomRight: Radius.circular(28),
                     ),
-                  ],
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Image.asset(
+                          "assets/images/fastrecovery_logo-2.png",
+                          width: 230,
+                          fit: BoxFit.contain,
+                          alignment: Alignment.center,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _selectedTab == _AuthTab.login
+                              ? 'Sign in to your agency workspace '
+                              : 'Register your company or join with a code',
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.body(
+                            size: 18.5,
+                            color: Colors.black.withOpacity(0.70),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // =========================
+                // MAIN CONTENT
+                // =========================
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(
+                      20,
+                      22,
+                      20,
+                      120, // footer ke liye bottom padding taaki content overlap na ho
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _authTabToggle(),
+                        const SizedBox(height: 22),
+                        _buildAnimatedSwitcher(),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // =========================
+            // TRANSPARENT FOOTER — overlay, keyboard ke waqt hide
+            // =========================
+            if (MediaQuery.of(context).viewInsets.bottom == 0)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 25),
+                  color: Colors.transparent,
+                  child: _buildFooter(false),
                 ),
               ),
-            ),
-
-            // =========================
-            // MAIN CONTENT
-            // =========================
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(
-                  20,
-                  22,
-                  20,
-                  20,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _authTabToggle(),
-
-                    const SizedBox(height: 22),
-
-                    _buildAnimatedSwitcher(),
-
-                    const SizedBox(height: 20),
-                  ],
-                ),
-              ),
-            ),
-
-            // =========================
-            // FIXED FOOTER
-            // =========================
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-              color: const Color(0xFFF4F7FC),
-              child: _buildFooter(false),
-            ),
           ],
         ),
       ),

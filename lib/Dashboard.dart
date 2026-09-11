@@ -1857,7 +1857,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: bg,
+        color: Color(0xFFFFfFFF),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: border),
         boxShadow: [
@@ -1893,7 +1893,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                     child: Icon(
                       Icons.menu_rounded,
                       size: 22,
-                      color: textColor,
+                      color: Color(0xFF000000),
                     ),
                   ),
                 ),
@@ -1920,9 +1920,10 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                 Container(
                   width: 1,
                   height: 27,
-                  color: isDark
-                      ? Colors.white.withOpacity(.10)
-                      : const Color(0xffE2E8F0),
+                  color: Color(0xFF000000)
+                  // isDark
+                  //     ? Colors.black.withOpacity(.10)
+                  //     : const Color(0xffE2E8F0),
                 ),
 
                 const SizedBox(width: 10),
@@ -1936,7 +1937,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                       fontSize: 17,
                       fontWeight: FontWeight.w900,
                       letterSpacing: -.2,
-                      color: textColor,
+                      color: Color(0xFF000000),
                     ),
                   ),
                 ),

@@ -3,16 +3,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:kartikrepoagency/Dashboard.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../Auth/Login/Login_page.dart';
 import '../Model_class/Proffile_model.dart';
-import '../main.dart';
+import '../Model_class/vehcial_detail_model.dart';
 import '../theme/app_theme.dart';
-import 'ID_card.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'Profile_page.dart';
-import 'Search_vehicle.dart';
+import 'Vehicle_Details.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -460,7 +457,7 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => VehicleDetailsPopup(
-          item: item,
+          item: VehicleItem.fromJson(item),
           onClose: () => Navigator.pop(context),
         ),
       ),

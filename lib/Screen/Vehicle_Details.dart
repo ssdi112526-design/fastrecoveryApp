@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../Model_class/vehcial_detail_model.dart';
 import '../theme/app_theme.dart';
 
 class VehicleDetailsPopup extends StatefulWidget {
-  final Map<String, dynamic> item;
+  final VehicleItem item;
   final VoidCallback onClose;
 
   const VehicleDetailsPopup({
@@ -24,14 +25,6 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       'https://www.fastrecovery.in/api/confirmations';
 
   String? _sharingChannel;
-
-  String _value(String key) {
-    final value = widget.item[key];
-    if (value == null) return '-';
-    final text = value.toString();
-    if (text.isEmpty || text == 'null') return '-';
-    return text;
-  }
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -83,7 +76,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       }
 
       final payload = {
-        'searchItem': widget.item,
+        'searchItem': widget.item.toJson(),
         'traceMode': 'ONLINE',
         'shareChannel': channel,
       };
@@ -166,12 +159,12 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
   }
 
   Future<void> _openEmail({required String message}) async {
-    final caseCode = _value('caseCode') != '-' ? _value('caseCode') : 'Vehicle Trace Report';
+    final subject = 'Vehicle Traced — ${widget.item.vehicleNumber}';
 
     final uri = Uri(
       scheme: 'mailto',
       query:
-      'subject=${Uri.encodeComponent('Vehicle Traced — $caseCode')}&body=${Uri.encodeComponent(message)}',
+      'subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(message)}',
     );
 
     if (await canLaunchUrl(uri)) {
@@ -203,43 +196,12 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // ---------------- Vehicle ----------------
-    final vehicle = _value('vehicleNumber');
-    final chassis = _value('chassisNumber');
-    final engine = _value('engineNumber');
-    final brand = _value('vehicleBrand');
-    final model = _value('vehicleModel');
-    final status = _value('repoStatus');
-
-    // ---------------- Customer ----------------
-    final customer = _value('customerName');
-    final address = _value('addressLine1');
-    final city = _value('city');
-    final state = _value('state');
-    final pincode = _value('state');
-    final mobileNumber = _value('mobileNumber');
-    final alternateMobileNumber = _value('alternateMobileNumber');
-    // ---------------- Finance ----------------
-    //final bank = _value('bankName');
-    //final branch = _value('branchName');
-    //final loanAccount = _value('loanAccountNumber');
-    final referenceNumber = _value('referenceNumber');
-    final emi = _value('emiAmount');
-    final due = _value('dueAmount');
-    final outstanding = _value('totalOutstandingAmount');
-    final bucket = _value('bucket');
-
-    // ---------------- Other ----------------
-    final confirmationStatus = _value('confirmationStatus');
-    // final bankNotifyEmail1 = _value('bankNotifyEmail1');
-    // final bankNotifyEmail2 = _value('bankNotifyEmail2');
+    final item = widget.item;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xff0B1220) : const Color(0xffF8FAFC),
       appBar: AppBar(
-        backgroundColor:
-        isDark ? const Color(0xff111827) : Colors.white,
+        backgroundColor: isDark ? const Color(0xff111827) : Colors.white,
         elevation: 0.5,
         scrolledUnderElevation: 0.5,
         surfaceTintColor: Colors.transparent,
@@ -256,48 +218,49 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              "Vehicle Details",
+               '${item.vehicleNumber}',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 22,
                 fontWeight: FontWeight.w800,
                 color: isDark ? Colors.white : AppColors.navy950,
               ),
             ),
             const SizedBox(height: 2),
-            Text(
-              '$brand • $model',
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w500,
-                color: isDark ? Colors.white70 : AppColors.slate400,
-              ),
-            ),
+            // Text(
+            //   '${item.customerName}',
+            //       // '• ${item.vehicleModel}',
+            //   style: TextStyle(
+            //     fontSize: 16.5,
+            //     fontWeight: FontWeight.w500,
+            //     color: isDark ? Colors.white70 : AppColors.slate400,
+            //   ),
+            // ),
           ],
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 14),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.blue600.withOpacity(.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.blue600.withOpacity(.3)),
-                ),
-                child: Text(
-                  status.toUpperCase(),
-                  style: const TextStyle(
-                    color: AppColors.blue600,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: .3,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+        // actions: [
+        //   Padding(
+        //     padding: const EdgeInsets.only(right: 14),
+        //     child: Center(
+        //       child: Container(
+        //         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        //         decoration: BoxDecoration(
+        //           color: AppColors.blue600.withOpacity(.1),
+        //           borderRadius: BorderRadius.circular(20),
+        //           border: Border.all(color: AppColors.blue600.withOpacity(.3)),
+        //         ),
+        //         child: Text(
+        //           item.repoStatus.toUpperCase(),
+        //           style: const TextStyle(
+        //             color: AppColors.blue600,
+        //             fontSize: 10,
+        //             fontWeight: FontWeight.w800,
+        //             letterSpacing: .3,
+        //           ),
+        //         ),
+        //       ),
+        //     ),
+        //   ),
+        // ],
       ),
       body: Column(
         children: [
@@ -309,44 +272,44 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                   _popupSection('Customer Information', Icons.person_outline),
                   const SizedBox(height: 10),
                   _detailGrid([
-                    (Icons.person_outline, 'Customer Name', customer),
-                    (Icons.location_on_outlined, 'Address', address),
-                    (Icons.location_city_outlined, 'City', city),
-                    (Icons.map_outlined, 'State', state),
-                    (Icons.phone_outlined, 'Mobile Number', mobileNumber),
-                    (Icons.phone_android_outlined, 'Alternate Mobile', alternateMobileNumber),
-                    (Icons.numbers_outlined, 'Reference Number', referenceNumber),
+                    (Icons.person_outline, 'Customer Name', item.customerName),
+                    //(Icons.location_on_outlined, 'Address', item.addressLine1),
+                    (Icons.location_city_outlined, 'City', item.city),
+                    (Icons.map_outlined, 'State', item.state),
+                    // (Icons.phone_outlined, 'Mobile Number', item.mobileNumber),
+                    // (Icons.phone_android_outlined, 'Alternate Mobile', item.alternateMobileNumber),
+                    // (Icons.numbers_outlined, 'Reference Number', item.referenceNumber),
                   ]),
                   const SizedBox(height: 18),
                   _popupSection('Vehicle Information', Icons.directions_car_outlined),
                   const SizedBox(height: 10),
                   _detailGrid([
-                    (Icons.directions_car_outlined, 'Vehicle Number', vehicle),
-                    (Icons.confirmation_number_outlined, 'Chassis Number', chassis),
-                    (Icons.settings_outlined, 'Engine Number', engine),
-                    (Icons.category_outlined, 'Brand', brand),
-                    (Icons.car_repair_outlined, 'Model', model),
-                    (Icons.car_repair_outlined, 'Model', model),
+                    (Icons.directions_car_outlined, 'Vehicle Number', item.vehicleNumber),
+                    (Icons.confirmation_number_outlined, 'Chassis Number', item.chassisNumber),
+                    (Icons.settings_outlined, 'Engine Number', item.engineNumber),
+                    (Icons.category_outlined, 'Brand', item.vehicleBrand),
+                    (Icons.car_repair_outlined, 'Model', item.vehicleModel),
                   ]),
-                  const SizedBox(height: 18),
-                  _popupSection('Finance Information', Icons.account_balance_wallet_outlined),
-                  const SizedBox(height: 10),
+                  //const SizedBox(height: 18),
+                  //_popupSection('Finance Information', Icons.account_balance_wallet_outlined),
+                 // const SizedBox(height: 10),
+
                   _detailGrid([
-                    // (Icons.account_balance_outlined, 'Bank', bank),
-                    // (Icons.account_tree_outlined, 'Branch', branch),
-                    // (Icons.receipt_long_outlined, 'Loan Account No.', loanAccount),
-                    (Icons.currency_rupee, 'EMI Amount', '₹$emi'),
-                    (Icons.money_off_csred_outlined, 'Due Amount', '₹$due'),
-                    (Icons.account_balance_wallet_outlined, 'Outstanding', '₹$outstanding'),
-                    (Icons.inbox_outlined, 'Bucket', bucket),
+                    // (Icons.currency_rupee, 'EMI Amount', '₹${item.emiAmount}'),
+                    // (Icons.money_off_csred_outlined, 'Due Amount', '₹${item.dueAmount}'),
+                    // (Icons.account_balance_wallet_outlined, 'Outstanding', '₹${item.totalOutstandingAmount}'),
+                    // (Icons.inbox_outlined, 'Bucket', item.bucket),
                   ]),
+
                   const SizedBox(height: 18),
-                  _popupSection('Status & Bank Contact', Icons.info_outline),
+
+                  _popupSection('Status', Icons.info_outline),
+
                   const SizedBox(height: 10),
+
                   _detailGrid([
-                    (Icons.flag_outlined, 'Confirmation Status', confirmationStatus),
-                    (Icons.email_outlined, 'Repo Status', status),
-                    // (Icons.email_outlined, 'Bank Notify Email 2', bankNotifyEmail2),
+                    (Icons.flag_outlined, 'Confirmation Status', item.confirmationStatus),
+                    (Icons.info_outline, 'Repo Status', item.repoStatus),
                   ]),
                   const SizedBox(height: 16),
                 ],
@@ -360,21 +323,22 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
   }
 
   Widget _popupSection(String title, IconData icon) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       children: [
-        Icon(icon, size: 18, color: AppColors.blue600),
+        Icon(icon, size: 22, color: AppColors.blue600),
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy950),
+          style:  TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : Colors.black,
+          ),
         ),
       ],
     );
   }
-
-  // ============================================================
-  // DETAIL GRID — 2 items per row, plain text (no card/box)
-  // ============================================================
 
   Widget _detailGrid(List<(IconData, String, String)> details) {
     final rows = <Widget>[];
@@ -406,6 +370,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
   }
 
   Widget _detailTile((IconData, String, String) detail) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -413,31 +378,51 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
           detail.$2,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: AppColors.slate400,
-            letterSpacing: .3,
+          style:  TextStyle(
+            fontSize: 16.5,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white: Colors.black,
+            letterSpacing: .9,
           ),
         ),
         const SizedBox(height: 4),
         Text(
-          detail.$3,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: AppColors.navy950,
-          ),
-        ),
+            detail.$3,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style:  TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70: Colors.black54
+            ),
+        // Row(
+        //   crossAxisAlignment: CrossAxisAlignment.start,
+        //   children: [
+        //     const Text(
+        //       '• ',
+        //       style: TextStyle(
+        //         fontSize: 14,
+        //         fontWeight: FontWeight.w700,
+        //         color: AppColors.navy950,
+        //       ),
+        //     ),
+        //     Expanded(
+        //       child: Text(
+        //         detail.$3,
+        //         maxLines: 3,
+        //         overflow: TextOverflow.ellipsis,
+        //         style: const TextStyle(
+        //           fontSize: 14,
+        //           fontWeight: FontWeight.w700,
+        //           color: AppColors.navy950,
+        //         ),
+        //       ),
+        //     ),
+        //   ],
+         ),
       ],
     );
   }
-
-  // ============================================================
-  // ACTION BAR — WhatsApp / Email / SMS
-  // ============================================================
 
   Widget _buildActionBar(bool isDark) {
     return Container(
