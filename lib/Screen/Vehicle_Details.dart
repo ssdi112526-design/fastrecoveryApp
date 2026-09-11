@@ -204,23 +204,36 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // ---------------- Vehicle ----------------
     final vehicle = _value('vehicleNumber');
     final chassis = _value('chassisNumber');
-    final customer = _value('customerName');
-    final bank = _value('bankName');
-    final branch = _value('branchName');
+    final engine = _value('engineNumber');
     final brand = _value('vehicleBrand');
     final model = _value('vehicleModel');
     final status = _value('repoStatus');
+
+    // ---------------- Customer ----------------
+    final customer = _value('customerName');
     final address = _value('addressLine1');
+    final city = _value('city');
+    final state = _value('state');
+    final pincode = _value('state');
+    final mobileNumber = _value('mobileNumber');
+    final alternateMobileNumber = _value('alternateMobileNumber');
+    // ---------------- Finance ----------------
+    //final bank = _value('bankName');
+    //final branch = _value('branchName');
+    //final loanAccount = _value('loanAccountNumber');
+    final referenceNumber = _value('referenceNumber');
     final emi = _value('emiAmount');
     final due = _value('dueAmount');
     final outstanding = _value('totalOutstandingAmount');
-    final loanAccount = _value('loanAccountNumber');
-    final engine = _value('engineNumber');
-    final contact1 = _value('contactPerson1Phone');
-    final contact2 = _value('contactPerson2Phone');
-    final contact3 = _value('contactPerson3Phone');
+    final bucket = _value('bucket');
+
+    // ---------------- Other ----------------
+    final confirmationStatus = _value('confirmationStatus');
+    // final bankNotifyEmail1 = _value('bankNotifyEmail1');
+    // final bankNotifyEmail2 = _value('bankNotifyEmail2');
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xff0B1220) : const Color(0xffF8FAFC),
@@ -242,21 +255,15 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text("vehicle Details",style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: isDark ? Colors.white : AppColors.navy950,
-            ),
-          ),
             Text(
-              vehicle,
+              "Vehicle Details",
               style: TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w800,
                 color: isDark ? Colors.white : AppColors.navy950,
               ),
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 2),
             Text(
               '$brand • $model',
               style: TextStyle(
@@ -304,9 +311,11 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                   _detailGrid([
                     (Icons.person_outline, 'Customer Name', customer),
                     (Icons.location_on_outlined, 'Address', address),
-                    (Icons.call_outlined, 'Contact 1', contact1),
-                    (Icons.call_outlined, 'Contact 2', contact2),
-                    (Icons.call_outlined, 'Contact 3', contact3),
+                    (Icons.location_city_outlined, 'City', city),
+                    (Icons.map_outlined, 'State', state),
+                    (Icons.phone_outlined, 'Mobile Number', mobileNumber),
+                    (Icons.phone_android_outlined, 'Alternate Mobile', alternateMobileNumber),
+                    (Icons.numbers_outlined, 'Reference Number', referenceNumber),
                   ]),
                   const SizedBox(height: 18),
                   _popupSection('Vehicle Information', Icons.directions_car_outlined),
@@ -317,17 +326,27 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                     (Icons.settings_outlined, 'Engine Number', engine),
                     (Icons.category_outlined, 'Brand', brand),
                     (Icons.car_repair_outlined, 'Model', model),
+                    (Icons.car_repair_outlined, 'Model', model),
                   ]),
                   const SizedBox(height: 18),
                   _popupSection('Finance Information', Icons.account_balance_wallet_outlined),
                   const SizedBox(height: 10),
                   _detailGrid([
-                    (Icons.account_balance_outlined, 'Bank', bank),
-                    (Icons.account_tree_outlined, 'Branch', branch),
-                    (Icons.receipt_long_outlined, 'Loan Account No.', loanAccount),
+                    // (Icons.account_balance_outlined, 'Bank', bank),
+                    // (Icons.account_tree_outlined, 'Branch', branch),
+                    // (Icons.receipt_long_outlined, 'Loan Account No.', loanAccount),
                     (Icons.currency_rupee, 'EMI Amount', '₹$emi'),
                     (Icons.money_off_csred_outlined, 'Due Amount', '₹$due'),
                     (Icons.account_balance_wallet_outlined, 'Outstanding', '₹$outstanding'),
+                    (Icons.inbox_outlined, 'Bucket', bucket),
+                  ]),
+                  const SizedBox(height: 18),
+                  _popupSection('Status & Bank Contact', Icons.info_outline),
+                  const SizedBox(height: 10),
+                  _detailGrid([
+                    (Icons.flag_outlined, 'Confirmation Status', confirmationStatus),
+                    (Icons.email_outlined, 'Repo Status', status),
+                    // (Icons.email_outlined, 'Bank Notify Email 2', bankNotifyEmail2),
                   ]),
                   const SizedBox(height: 16),
                 ],
@@ -353,139 +372,72 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
     );
   }
 
+  // ============================================================
+  // DETAIL GRID — 2 items per row, plain text (no card/box)
+  // ============================================================
+
   Widget _detailGrid(List<(IconData, String, String)> details) {
-    final hiddenFields = {
-      'Contact 1',
-      'Contact 2',
-      'Contact 3',
-      'Case Code',
-      'Vehicle Type',
-      'City',
-      'State',
-      'Pincode',
-      'Due Amount',
-      'Bucket',
-      'Yeah Sub',
-    };
-
-    final visibleDetails = details
-        .where((detail) => !hiddenFields.contains(detail.$2))
-        .toList();
-
     final rows = <Widget>[];
 
-    for (int i = 0; i < visibleDetails.length; i += 2) {
-      final left = visibleDetails[i];
-      final right =
-      i + 1 < visibleDetails.length ? visibleDetails[i + 1] : null;
+    for (int i = 0; i < details.length; i += 2) {
+      final left = details[i];
+      final right = i + 1 < details.length ? details[i + 1] : null;
 
       rows.add(
         Padding(
           padding: EdgeInsets.only(
-            bottom: i + 2 < visibleDetails.length ? 10 : 0,
+            bottom: i + 2 < details.length ? 14 : 0,
           ),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _detailTile(left, i + 1),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: right != null
-                      ? _detailTile(right, i + 2)
-                      : const SizedBox(),
-                ),
-              ],
-            ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _detailTile(left)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: right != null ? _detailTile(right) : const SizedBox(),
+              ),
+            ],
           ),
         ),
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xffE2E8F0),
+    return Column(children: rows);
+  }
+
+  Widget _detailTile((IconData, String, String) detail) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          detail.$2,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: AppColors.slate400,
+            letterSpacing: .3,
+          ),
         ),
-      ),
-      child: Column(
-        children: rows,
-      ),
+        const SizedBox(height: 4),
+        Text(
+          detail.$3,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: AppColors.navy950,
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _detailTile(
-      (IconData, String, String) detail,
-      int number,
-      ) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xffF8FAFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xffE2E8F0),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.blue600.withOpacity(.08),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '$number',
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: AppColors.blue600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  detail.$2,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.slate400,
-                    letterSpacing: .3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  detail.$3,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.navy950,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // ============================================================
+  // ACTION BAR — WhatsApp / Email / SMS
+  // ============================================================
 
   Widget _buildActionBar(bool isDark) {
     return Container(
