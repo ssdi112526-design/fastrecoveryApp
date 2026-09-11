@@ -132,8 +132,8 @@ class _SplashScreenState extends State<SplashScreen>
             Alignment(-0.2, -0.8),
             radius: 1.1,
             colors: [
-              Color(0xFF1C3260),
-              AppColors.navy950,
+              Color(0xFFFFFFFF),
+              AppColors.white,
             ],
           ),
         ),
@@ -163,17 +163,20 @@ class _SplashScreenState extends State<SplashScreen>
 
                   children: [
 
-                    SizedBox(
-                      width: 150,
-                      height: 190,
+                    // SizedBox(
+                    //   width: 150,
+                    //   height: 190,
 
-                      child: Image.asset(
-                        'assets/images/kartik_agency.png',
+                      //child:
+                      Image.asset(
+                        'assets/images/fastrecovery_logo-2.png',
+                        height: 70,
+                        //width: 60,
                         fit: BoxFit.contain,
                       ),
-                    ),
+                    //),
 
-                    const SizedBox(height: 36),
+                    //const SizedBox(height: 36),
 
                     FadeTransition(
                       opacity:
@@ -194,27 +197,28 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
 
                           children: [
-                            const TextSpan(
-                              text: 'KARTIK\n',
-                            ),
 
-                            TextSpan(
-                              text:
-                              'REPOSSESSION AGENCY',
-
-                              style: TextStyle(
-                                color:
-                                AppColors.gold400,
-                                fontWeight:
-                                FontWeight.w800,
-                              ),
-                            ),
+                            // const TextSpan(
+                            //   text: 'KARTIK\n',
+                            // ),
+                            //
+                            // TextSpan(
+                            //   text:
+                            //   'REPOSSESSION AGENCY',
+                            //
+                            //   style: TextStyle(
+                            //     color:
+                            //     AppColors.gold400,
+                            //     fontWeight:
+                            //     FontWeight.w800,
+                            //   ),
+                            // ),
                           ],
                         ),
                       ),
                     ),
 
-                    const SizedBox(height: 8),
+                    //const SizedBox(height: 8),
 
                     FadeTransition(
                       opacity:
@@ -228,9 +232,9 @@ class _SplashScreenState extends State<SplashScreen>
 
                         style:
                         AppTextStyles.mono(
-                          size: 11.5,
+                          size: 13.5,
                           color:
-                          AppColors.slate400,
+                          AppColors.navy900,
                         ).copyWith(
                           letterSpacing: 2,
                         ),

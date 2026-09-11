@@ -76,22 +76,22 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/Fast_Recovery_logo.png"
+  image_path: "assets/images/fastrecoverylogo.png"
   adaptive_icon_background: "#f2f3f4"
-  adaptive_icon_foreground: "assets/images/Fast_Recovery_logo.png"
+  adaptive_icon_foreground: "assets/images/fastrecoverylogo.png"
 
   windows:
     generate: true
-    image_path: "assets/images/Fast_Recovery_logo.png"
+    image_path: "assets/images/fastrecoverylogo.png"
     icon_size: 256
 
   macos:
     generate: true
-    image_path: "assets/images/Fast_Recovery_logo.png"
+    image_path: "assets/images/fastrecoverylogo.png"
 
   linux:
     generate: true
-    image_path: "assets/images/Fast_Recovery_logo.png"
+    image_path: "assets/images/fastrecoverylogo.png"
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
