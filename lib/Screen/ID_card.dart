@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'Profile_page.dart';
 
@@ -35,6 +38,31 @@ class _IdCardPageState extends State<IdCardPage> {
 
   Map<String, dynamic> userData = {};
   Map<String, dynamic> companyData = {};
+
+  static const List<String> photoKeyCandidates = [
+    'photoUrl',
+    'photo',
+    'profileImage',
+    'profile_pic',
+    'image',
+    'avatar',
+  ];
+
+  String userValue(String key) {
+    return userData[key]?.toString() ?? '';
+  }
+
+  String _resolvePhotoUrl() {
+    for (final key in photoKeyCandidates) {
+      final value = userData[key]?.toString();
+      if (value != null && value.isNotEmpty) {
+        debugPrint('ID CARD: photo found under key "$key" -> $value');
+        return value;
+      }
+    }
+    debugPrint('ID CARD: no photo key matched. Available keys: ${userData.keys}');
+    return '';
+  }
 
   @override
   void initState() {
@@ -123,12 +151,212 @@ class _IdCardPageState extends State<IdCardPage> {
     }
   }
 
-  String userValue(String key) {
-    return userData[key]?.toString() ?? '';
-  }
-
   String companyValue(String key) {
     return companyData[key]?.toString() ?? '';
+  }
+
+  Future<pw.Document> _generateIdCardPdf() async {
+    final pdf = pw.Document();
+
+    pw.ImageProvider? photoImage;
+    final photoUrl = _resolvePhotoUrl();
+    if (photoUrl.isNotEmpty) {
+      try {
+        final response = await http.get(Uri.parse(photoUrl));
+        if (response.statusCode == 200) {
+          photoImage = pw.MemoryImage(response.bodyBytes);
+        }
+      } catch (e) {
+        debugPrint('PDF: photo fetch failed -> $e');
+      }
+    }
+
+    final navy = PdfColor.fromInt(0xff1B3A5C);
+    final muted = PdfColors.grey600;
+    final dark = PdfColor.fromInt(0xff0F172A);
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(0),
+        build: (context) {
+          return pw.Container(
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300, width: 1),
+              borderRadius: pw.BorderRadius.circular(16),
+            ),
+            margin: const pw.EdgeInsets.all(24),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // Header
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.fromLTRB(24, 22, 24, 20),
+                  decoration: pw.BoxDecoration(
+                    color: navy,
+                    borderRadius: const pw.BorderRadius.only(
+                      topLeft: pw.Radius.circular(16),
+                      topRight: pw.Radius.circular(16),
+                    ),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        companyValue('companyName').isEmpty
+                            ? 'Company'
+                            : companyValue('companyName'),
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 22,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.SizedBox(height: 6),
+                      pw.Text(
+                        companyValue('companyCode').isEmpty
+                            ? '—'
+                            : companyValue('companyCode'),
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Body: photo + fields
+                pw.Padding(
+                  padding: const pw.EdgeInsets.fromLTRB(24, 22, 24, 22),
+                  child: pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Container(
+                        width: 110,
+                        height: 140,
+                        decoration: pw.BoxDecoration(
+                          border: pw.Border.all(color: PdfColors.grey400),
+                          borderRadius: pw.BorderRadius.circular(10),
+                        ),
+                        child: photoImage != null
+                            ? pw.ClipRRect(
+                          horizontalRadius: 10,
+                          verticalRadius: 10,
+                          child: pw.Image(photoImage, fit: pw.BoxFit.cover),
+                        )
+                            : pw.Center(child: pw.Text('No Photo')),
+                      ),
+                      pw.SizedBox(width: 24),
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(
+                              userValue('name').isEmpty ? 'Employee' : userValue('name'),
+                              style: pw.TextStyle(
+                                fontSize: 20,
+                                fontWeight: pw.FontWeight.bold,
+                                color: dark,
+                              ),
+                            ),
+                            pw.SizedBox(height: 14),
+                            _pdfFieldRow(muted, dark, 'Post', userValue('post')),
+                            pw.SizedBox(height: 10),
+                            _pdfFieldRow(muted, dark, 'Date of birth', userValue('dateOfBirth')),
+                            pw.SizedBox(height: 10),
+                            _pdfFieldRow(muted, dark, 'Pincode', userValue('pincode')),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                pw.Divider(height: 1, color: PdfColors.grey300),
+
+                // Footer
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.grey100,
+                    borderRadius: pw.BorderRadius.only(
+                      bottomLeft: pw.Radius.circular(16),
+                      bottomRight: pw.Radius.circular(16),
+                    ),
+                  ),
+                  child: pw.Row(
+                    children: [
+                      pw.Text('Office: ', style: pw.TextStyle(color: muted, fontSize: 12)),
+                      pw.Text(
+                        companyValue('office').isEmpty ? '—' : companyValue('office'),
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: dark),
+                      ),
+                      pw.SizedBox(width: 40),
+                      pw.Text('Mobile: ', style: pw.TextStyle(color: muted, fontSize: 12)),
+                      pw.Text(
+                        userValue('phone').isEmpty ? '—' : userValue('phone'),
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: dark),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
+  pw.Widget _pdfFieldRow(PdfColor labelColor, PdfColor valueColor, String label, String value) {
+    return pw.Row(
+      children: [
+        pw.SizedBox(
+          width: 110,
+          child: pw.Text(label, style: pw.TextStyle(color: labelColor, fontSize: 12)),
+        ),
+        pw.Text(
+          value.isEmpty ? '—' : value,
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: valueColor),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _downloadIdCardPdf() async {
+    try {
+      final pdf = await _generateIdCardPdf();
+      await Printing.sharePdf(
+        bytes: await pdf.save(),
+        filename: 'id_card_${userValue('id')}.pdf',
+      );
+    } catch (e) {
+      debugPrint('DOWNLOAD ERROR: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PDF download failed. Try again.')),
+      );
+    }
+  }
+
+  Future<void> _printIdCard() async {
+    try {
+      final pdf = await _generateIdCardPdf();
+      await Printing.layoutPdf(
+        onLayout: (format) async => pdf.save(),
+      );
+    } catch (e) {
+      debugPrint('PRINT ERROR: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Print failed. Try again.')),
+      );
+    }
   }
 
   @override
@@ -544,7 +772,7 @@ class _IdCardPageState extends State<IdCardPage> {
   }
 
   Widget _buildPremiumPhoto() {
-    final photoUrl = userValue('photoUrl');
+    final photoUrl = _resolvePhotoUrl();
 
     return Container(
       width: 100,
@@ -588,7 +816,9 @@ class _IdCardPageState extends State<IdCardPage> {
               ),
             );
           },
-          errorBuilder: (_, __, ___) {
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint('ID CARD: image load FAILED for $photoUrl');
+            debugPrint('ID CARD: error -> $error');
             return Container(
               color: Colors.white,
               child: const Icon(
@@ -775,9 +1005,7 @@ class _IdCardPageState extends State<IdCardPage> {
           title: 'Print ID Card',
           subtitle: 'Print your official employee card',
           color: const Color(0xff7C3AED),
-          onTap: () {
-            // print function
-          },
+          onTap: _printIdCard,
         ),
         const SizedBox(height: 12),
         _premiumAction(
@@ -786,9 +1014,7 @@ class _IdCardPageState extends State<IdCardPage> {
           title: 'Download PDF',
           subtitle: 'Save a digital copy of your ID card',
           color: const Color(0xff059669),
-          onTap: () {
-            // download function
-          },
+          onTap: _downloadIdCardPdf,
         ),
       ],
     );
