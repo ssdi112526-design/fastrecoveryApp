@@ -4,13 +4,13 @@ import 'package:http/http.dart' as http;
 import 'package:kartikrepoagency/Screen/Profile_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../Model_class/Proffile_model.dart';
-import '../theme/app_theme.dart';
-import 'Auth/Login/Login_page.dart';
-import 'Screen/ID_card.dart';
-import 'Screen/home.dart';
-import 'Service/SharedPreferenceService.dart';
-import 'main.dart';
+import '../../Model_class/Proffile_model.dart';
+import '../../theme/app_theme.dart';
+import '../Auth/Login/Login_page.dart';
+import 'ID_card.dart';
+import 'Find_vehicle.dart';
+import '../Service/SharedPreferenceService.dart';
+import '../main.dart';
 
 class AgencyDashboardPage extends StatefulWidget {
   const AgencyDashboardPage({super.key});
@@ -1958,13 +1958,19 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       // mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Image.asset(
+          isDark
+              ? "assets/images/fastrecovery_logo_2dark.png"
+              : "assets/images/fastrecovery_logo-2.png",
+          height: 30,
+        ),
         Text(
           'Developed By: Software Solutions Development India',
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style:  TextStyle(
             fontSize: 11.5,
             fontWeight: FontWeight.bold,
-            color: Colors.black,
+            color: isDark ? Colors.white : Colors.black,
           ),
         ),
 

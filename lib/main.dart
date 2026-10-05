@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:kartikrepoagency/Dashboard.dart';
+import 'package:kartikrepoagency/Screen/Dashboard.dart';
 import 'Service/SharedPreferenceService.dart';
 import 'Splash_screen/Splash_screen.dart';
 import 'Auth/Login/Login_page.dart';
