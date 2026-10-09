@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import '../../Service/Location_tracking_permission.dart';
 import '../../Service/SharedPreferenceService.dart';
 import '../../Widget/Common_widget.dart';
 import '../../theme/app_theme.dart';
@@ -139,6 +140,9 @@ class _LoginScreenState extends State<LoginScreen> {
     return emailErr == null && passwordErr == null;
   }
 
+// Login screen ki file ke upar ye import add karo (path apne folder ke hisaab se):
+// import 'location_tracking_service.dart';
+
   Future<void> _login() async {
     if (!_validateFields()) return;
     if (_isLoading) return;
@@ -199,6 +203,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (!mounted) return;
         FocusScope.of(context).unfocus();
+
+        // ★ NEW: token save ho chuka hai -> location permission maango + tracking shuru karo.
+        // Navigation se PEHLE call karo, warna login screen ka context nahi bachega
+        // aur permission dialog nahi dikhega.
+        await LocationTrackingService.instance.start(context);
+        if (!mounted) return;
 
         Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
       } else {

@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../Model_class/Proffile_model.dart';
 import '../../theme/app_theme.dart';
 import '../Auth/Login/Login_page.dart';
+import '../Service/Location_tracking_permission.dart';
 import 'ID_card.dart';
 import 'Find_vehicle.dart';
 import '../Service/SharedPreferenceService.dart';
@@ -60,28 +61,24 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   @override
   void initState() {
     super.initState();
-
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      LocationTrackingService.instance.start(context);
+    });
     _pageAnimationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 850),
+      duration: const Duration(milliseconds: 450),
     );
-
     _fadeAnimation = CurvedAnimation(
       parent: _pageAnimationController,
       curve: Curves.easeOutCubic,
     );
-
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.035),
       end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _pageAnimationController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
-
+    ).animate(_fadeAnimation);
+    _pageAnimationController.forward(); // ← turant, API ka wait nahi
     _loadDashboardData();
+
   }
 
   @override
@@ -94,109 +91,110 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   // LOAD ALL DASHBOARD DATA
   // =========================================================
 
-  Future<void> _loadDashboardData() async {
-    if (mounted) {
-      setState(() => _loading = true);
-    }
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      final token = prefs.getString('token');
-
-      if (token == null || token.trim().isEmpty) {
-        throw Exception('Authentication token not found');
-      }
-
-      final headers = <String, String>{
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${token.trim()}',
-      };
-
-      // Local fallback data.
-      final remainingDays = prefs.getInt('remainingDays') ?? 0;
-      final offlineRecords = prefs.getInt('offlineRecords') ?? 0;
-      final syncCode = prefs.getString('syncCode') ?? '----';
-      final agencyTag = prefs.getString('agencyTag') ?? '';
-      //final isOnline = prefs.getBool('isOnline') ?? true;
-
-      // All backend calls.
-      final results = await Future.wait([
-        _getProfile(headers),
-        _getOverviewStats(headers),
-        _getPendingConfirmations(headers),
-        _getInventoryConfirmed(headers),
-        _getConfirmationCount(headers),
-      ]);
-
-      final user = results[0] as UserModel?;
-      final overview = results[1] as Map<String, dynamic>;
-      final pending = results[2] as Map<String, dynamic>;
-      final inventory = results[3] as Map<String, dynamic>;
-      final confirmationCount = results[4] as Map<String, dynamic>;
-
-      if (!mounted) return;
-
-
-        // -----------------------------------------------------
-        // COMPANY / AGENCY NAME — now dynamic from UserModel/CompanyModel
-        // -----------------------------------------------------
-      setState(() {
-        _user = user;
-        _userDataLoading = false;
-
-        _companyName = _extractCompanyName(user);
-        _phones = _extractPhones(user);
-
-        // Agar koi real number nahi hai, ek fallback number generate karo
-        _displayPhone =
-        _phones.isNotEmpty ? _phones.join('  •  ') : _generateRandomPhone();
-
-        _location = _extractLocation(user);
-        _remainingDays = remainingDays;
-        _offlineRecords = offlineRecords;
-        _syncCode = syncCode;
-        _agencyTag = agencyTag;
-        //_isOnline = isOnline;
-
-        // -----------------------------------------------------
-        // API STATS
-        // -----------------------------------------------------
-        _totalCases = _toInt(overview['cases']);
-        _todayActivity = _toInt(overview['todayActivity']);
-        _pendingConfirmations = _toInt(pending['pendingConfirmations']);
-        _inventoryConfirmed = _toInt(inventory['inventoryConfirmed']);
-        _totalConfirmations = _toInt(confirmationCount['totalConfirmations']);
-        _confirmedConfirmations =
-            _toInt(confirmationCount['confirmedConfirmations']);
-
-        _loading = false;
-      });
-
-      _pageAnimationController.forward(from: 0);
-    } catch (e) {
-      debugPrint('Agency dashboard error: $e');
-
-      if (!mounted) return;
-
-      setState(() {
-        _loading = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Unable to load dashboard data.'),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      );
-    }
-  }
+  // Future<void> _loadDashboardData() async {
+  //   if (mounted) {
+  //     setState(() => _loading = true);
+  //   }
+  //
+  //   try {
+  //     final prefs = await SharedPreferences.getInstance();
+  //
+  //     final token = prefs.getString('token');
+  //
+  //     if (token == null || token.trim().isEmpty) {
+  //       throw Exception('Authentication token not found');
+  //     }
+  //
+  //     final headers = <String, String>{
+  //       'Content-Type': 'application/json',
+  //       'Authorization': 'Bearer ${token.trim()}',
+  //     };
+  //
+  //     // Local fallback data.
+  //     final remainingDays = prefs.getInt('remainingDays') ?? 0;
+  //     final offlineRecords = prefs.getInt('offlineRecords') ?? 0;
+  //     final syncCode = prefs.getString('syncCode') ?? '----';
+  //     final agencyTag = prefs.getString('agencyTag') ?? '';
+  //     //final isOnline = prefs.getBool('isOnline') ?? true;
+  //
+  //     // All backend calls.
+  //     final results = await Future.wait([
+  //       _getProfile(headers),
+  //       _getOverviewStats(headers),
+  //       _getPendingConfirmations(headers),
+  //       _getInventoryConfirmed(headers),
+  //       _getConfirmationCount(headers),
+  //     ]);
+  //
+  //     final user = results[0] as UserModel?;
+  //     final overview = results[1] as Map<String, dynamic>;
+  //     final pending = results[2] as Map<String, dynamic>;
+  //     final inventory = results[3] as Map<String, dynamic>;
+  //     final confirmationCount = results[4] as Map<String, dynamic>;
+  //
+  //     if (!mounted) return;
+  //
+  //
+  //       // -----------------------------------------------------
+  //       // COMPANY / AGENCY NAME — now dynamic from UserModel/CompanyModel
+  //       // -----------------------------------------------------
+  //     setState(() {
+  //       _user = user;
+  //       _userDataLoading = false;
+  //
+  //       _companyName = _extractCompanyName(user);
+  //       _phones = _extractPhones(user);
+  //
+  //       // Agar koi real number nahi hai, ek fallback number generate karo
+  //       _displayPhone =
+  //       _phones.isNotEmpty ? _phones.join('  •  ') : _generateRandomPhone();
+  //
+  //       _location = _extractLocation(user);
+  //       _remainingDays = remainingDays;
+  //       _offlineRecords = offlineRecords;
+  //       _syncCode = syncCode;
+  //       _agencyTag = agencyTag;
+  //       //_isOnline = isOnline;
+  //
+  //       // -----------------------------------------------------
+  //       // API STATS
+  //       // -----------------------------------------------------
+  //       _totalCases = _toInt(overview['cases']);
+  //       _todayActivity = _toInt(overview['todayActivity']);
+  //       _pendingConfirmations = _toInt(pending['pendingConfirmations']);
+  //       _inventoryConfirmed = _toInt(inventory['inventoryConfirmed']);
+  //       _totalConfirmations = _toInt(confirmationCount['totalConfirmations']);
+  //       _confirmedConfirmations =
+  //           _toInt(confirmationCount['confirmedConfirmations']);
+  //
+  //       _loading = false;
+  //     });
+  //
+  //     _pageAnimationController.forward(from: 0);
+  //   } catch (e) {
+  //     debugPrint('Agency dashboard error: $e');
+  //
+  //     if (!mounted) return;
+  //
+  //     setState(() {
+  //       _loading = false;
+  //     });
+  //
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //         content: const Text('Unable to load dashboard data.'),
+  //         behavior: SnackBarBehavior.floating,
+  //         margin: const EdgeInsets.all(16),
+  //         shape: RoundedRectangleBorder(
+  //           borderRadius: BorderRadius.circular(14),
+  //         ),
+  //       ),
+  //     );
+  //   }
+  // }
 
   Future<void> _logout(BuildContext context) async {
+    await LocationTrackingService.instance.stop();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear(); // sara saved data clear (token, role, name, etc.)
 
@@ -204,7 +202,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const   LoginScreen()),
-          (route) => false, // pichla saara stack hata do
+          (route) => false,
     );
   }
 
@@ -386,11 +384,101 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   // GET /api/auth/profile  →  ProfileResponse -> UserModel
   // =========================================================
 
-  Future<UserModel?> _getProfile(Map<String, String> headers) async {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/api/auth/profile'),
-      headers: headers,
-    );
+
+  static const String _kProfileCache = 'dashboard_profile_cache';
+
+  void _applyUser(UserModel? user) {
+    _user = user;
+    _userDataLoading = false;
+    _companyName = _extractCompanyName(user);
+    _phones = _extractPhones(user);
+    _displayPhone = _phones.join('  •  ');
+    _location = _extractLocation(user);
+  }
+
+  Future<void> _loadDashboardData() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1) Local data + saved profile turant dikhao
+    UserModel? cached;
+    final raw = prefs.getString(_kProfileCache);
+    if (raw != null) {
+      try {
+        cached = ProfileResponse.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>,
+        ).user;
+      } catch (_) {}
+    }
+
+    if (mounted) {
+      setState(() {
+        _remainingDays = prefs.getInt('remainingDays') ?? 0;
+        _offlineRecords = prefs.getInt('offlineRecords') ?? 0;
+        _syncCode = prefs.getString('syncCode') ?? '----';
+        _agencyTag = prefs.getString('agencyTag') ?? '';
+
+        if (cached != null) {
+          _applyUser(cached);
+          _loading = false;
+        } else {
+          _loading = true;
+        }
+      });
+    }
+
+    // 2) Sirf profile API, background mein refresh
+    try {
+      final token = prefs.getString('token');
+      if (token == null || token.trim().isEmpty) {
+        throw Exception('Authentication token not found');
+      }
+
+      final user = await _getProfile(
+        {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${token.trim()}',
+        },
+        prefs,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _applyUser(user);
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('Agency dashboard error: $e');
+      if (!mounted) return;
+
+      setState(() => _loading = false);
+
+      // Saved data pehle se dikh raha ho to error mat dikhao
+      if (cached == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.toString().contains('Session expired')
+                  ? 'Session expired. Please login again.'
+                  : 'Unable to load dashboard data.',
+            ),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<UserModel?> _getProfile(
+      Map<String, String> headers,
+      SharedPreferences prefs,
+      ) async {
+    final response = await http
+        .get(Uri.parse('$_baseUrl/api/auth/profile'), headers: headers)
+        .timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 401) {
       throw Exception('Session expired');
@@ -400,21 +488,17 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       throw Exception('Profile API failed: ${response.statusCode}');
     }
 
-    dynamic decodedBody;
-    try {
-      decodedBody = jsonDecode(response.body);
-    } catch (_) {
-      decodedBody = null;
-    }
+    final decoded = jsonDecode(response.body);
+    final map = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
 
-    final decodedMap =
-    decodedBody is Map<String, dynamic> ? decodedBody : <String, dynamic>{};
-
-    final profileResponse = ProfileResponse.fromJson(decodedMap);
+    final profileResponse = ProfileResponse.fromJson(map);
 
     if (!profileResponse.success) {
       throw Exception('Profile API returned success=false');
     }
+
+    // Agli baar turant dikhane ke liye save karo
+    await prefs.setString(_kProfileCache, response.body);
 
     return profileResponse.user;
   }
@@ -1343,7 +1427,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
           const SizedBox(height: 7),
 
           Text(
-            'Agency Account',
+            'Agent Account',
             style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
