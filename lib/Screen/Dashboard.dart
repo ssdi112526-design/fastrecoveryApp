@@ -31,7 +31,9 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   // (the same typed model used on the Profile screen) instead of a raw map.
   UserModel? _user;
 
-  String _companyName = '';
+  String _userName = 'User';
+  String _companyName = 'Company';
+  String _companyCode = '';
   String _location = '';
   List<String> _phones = [];
   String _displayPhone = '';
@@ -1427,7 +1429,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
           const SizedBox(height: 7),
 
           Text(
-            'Agent Account',
+            'Team Leader',
             style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
@@ -1435,9 +1437,22 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
               color: mutedText,
             ),
           ),
+          Text(
+            '${_user!.name}',
+            key: ValueKey(_user!.name),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              letterSpacing: .35,
+              color: mainText,
+            ),
+          ),
 
           if (!_loading) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 2),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1754,45 +1769,49 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
             ],
           ),
           child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(.11),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Icon(icon, color: color, size: 21),
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: color.withOpacity(.11),
+                borderRadius: BorderRadius.circular(13),
               ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                        color: textColor,
-                      ),
+              child: Icon(icon, color: color, size: 21),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: textColor,
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w500,
-                        color: muted,
-                      ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w500,
+                      color: muted,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
         ),
       ),
     );
@@ -1845,28 +1864,33 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     final muted = isDark ? const Color(0xff7F8BA4) : const Color(0xff64748B);
 
     return
-      Row(
+      Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-              Expanded(
-                child: _panelCard(isDark: isDark,
-                    icon: Icons.admin_panel_settings_rounded,
-                    label: 'Control Panel',
-                    subtitle: 'Manage agency settings',
-                  color: AppColors.blue600,
-                    onTap: (){},
-                ),
-              ),
-          const SizedBox(width: 12),
-        Expanded(
-          child: _panelCard(isDark: isDark,
-            icon: Icons.admin_panel_settings_rounded,
-            label: 'Control Panel',
-            subtitle: 'Manage agency settings',
-            color: AppColors.blue600,
-            onTap: (){},
-          ),
-        ),
-    ]);
+          Row(
+            children: [
+                  Expanded(
+                    child: _panelCard(isDark: isDark,
+                        icon: Icons.admin_panel_settings_rounded,
+                        label: 'Control Panel',
+                        subtitle: 'Manage agency settings',
+                      color: AppColors.blue600,
+                        onTap: (){},
+                    ),
+                  ),
+              // const SizedBox(width: 12),
+            // Expanded(
+            //   child: _panelCard(isDark: isDark,
+            //     icon: Icons.admin_panel_settings_rounded,
+            //     label: 'Control Panel',
+            //     subtitle: 'Manage agency settings',
+            //     color: AppColors.blue600,
+            //     onTap: (){},
+            //   ),
+            // ),
+              ]),
+        ],
+      );
   }
 
   // =========================================================
