@@ -41,6 +41,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       'https://www.fastrecovery.in/api/confirmations';
   static const String _whatsappRecipientsUrl =
       'https://www.fastrecovery.in/api/confirmations/whatsapp-recipients';
+
   static const String _vehicleLoadedUrl =
       'https://www.fastrecovery.in/api/repo-cases/vehicle-loaded';
 
