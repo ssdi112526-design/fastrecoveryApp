@@ -770,7 +770,7 @@ class _Photo extends StatelessWidget {
           ? placeholder
           : Image.memory(
         bytes!,
-        fit: BoxFit.cover,
+        fit: BoxFit.contain,
         width: double.infinity,
         height: double.infinity,
         gaplessPlayback: true,

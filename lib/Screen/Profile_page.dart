@@ -1041,7 +1041,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 radius: 30,
                 backgroundColor:
                 AppColors.white.withOpacity(0.18),
-
                 backgroundImage: _pickedImage != null
                     ? FileImage(_pickedImage!)
                     : hasNetworkPhoto

@@ -39,11 +39,17 @@ class VehicleDetailsPopup extends StatefulWidget {
 class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
   static const String _confirmationsUrl =
       'https://www.fastrecovery.in/api/confirmations';
-  static const String _whatsappRecipientsUrl =
+
+  /// WhatsApp aur SMS dono isi recipients list ko use karte hain.
+  /// SMS ke liye alag endpoint ho to yahan badal do.
+  static const String _recipientsUrl =
       'https://www.fastrecovery.in/api/confirmations/whatsapp-recipients';
 
   static const String _vehicleLoadedUrl =
       'https://www.fastrecovery.in/api/repo-cases/vehicle-loaded';
+
+  static const Color _waColor = Color(0xff25D366);
+  static const Color _smsColor = Color(0xffF59E0B);
 
   final TextEditingController _loadedCtrl = TextEditingController();
   bool _loadingLoaded = false;
@@ -104,19 +110,39 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
     return '$message\n\nLoaded Details: $loaded';
   }
 
-  // ───────────────────────── WhatsApp flow ─────────────────────────
+  // ───────────────── Recipient flow (WhatsApp + SMS) ─────────────────
 
-  // WhatsApp tap -> recipients fetch -> select sheet -> send
-  Future<void> _handleWhatsAppTap() async {
+  /// Tap -> recipients fetch -> select sheet -> send
+  Future<void> _handleRecipientTap(String channel) async {
     if (_sharingChannel != null) return;
     FocusScope.of(context).unfocus();
-    setState(() => _sharingChannel = 'whatsapp');
+    setState(() => _sharingChannel = channel);
 
-    List<_Recipient> recipients = [];
+    final recipients = await _fetchRecipients();
+
+    if (!mounted) return;
+    setState(() => _sharingChannel = null);
+
+    if (recipients.isEmpty) {
+      _showSnack('No recipients found', isError: true);
+      return;
+    }
+
+    final isSms = channel == 'sms';
+    final picked = await _showRecipientSheet(
+      recipients,
+      accent: isSms ? _smsColor : _waColor,
+      icon: isSms ? Icons.sms_rounded : Icons.chat_rounded,
+    );
+    if (picked == null || !mounted) return;
+    await _sendToRecipient(channel, picked);
+  }
+
+  Future<List<_Recipient>> _fetchRecipients() async {
     try {
       final token = await _getToken();
       final response = await http.get(
-        Uri.parse(_whatsappRecipientsUrl),
+        Uri.parse(_recipientsUrl),
         headers: {
           'Accept': 'application/json',
           if (token != null && token.isNotEmpty)
@@ -130,43 +156,33 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
           body is Map &&
           body['success'] == true) {
         final raw = (body['data']?['adminRecipients'] as List?) ?? [];
-        recipients = raw
+        return raw
             .whereType<Map>()
-            .map((e) {
-          return _Recipient(
-            id: (e['id'] ?? e['_id'] ?? '').toString(),
-            name: (e['name'] ?? '').toString(),
-            phone: (e['phone'] ?? '').toString(),
-            roleLabel: (e['roleLabel'] ?? '').toString(),
-            isPrimary: e['isPrimary'] == true ||
-                e['isPrimaryAdmin'] == true ||
-                e['primary'] == true,
-          );
-        })
+            .map((e) => _Recipient(
+          id: (e['id'] ?? e['_id'] ?? '').toString(),
+          name: (e['name'] ?? '').toString(),
+          phone: (e['phone'] ?? '').toString(),
+          roleLabel: (e['roleLabel'] ?? '').toString(),
+          isPrimary: e['isPrimary'] == true ||
+              e['isPrimaryAdmin'] == true ||
+              e['primary'] == true,
+        ))
             .where((r) => r.phone.trim().isNotEmpty)
             .toList();
       }
     } catch (e) {
       debugPrint('RECIPIENTS ERROR: $e');
     }
-
-    if (!mounted) return;
-    setState(() => _sharingChannel = null);
-
-    if (recipients.isEmpty) {
-      _showSnack('No WhatsApp recipients found', isError: true);
-      return;
-    }
-
-    final picked = await _showRecipientSheet(recipients);
-    if (picked == null || !mounted) return;
-    await _sendWhatsApp(picked);
+    return [];
   }
 
-  Future<_Recipient?> _showRecipientSheet(List<_Recipient> recipients) {
+  Future<_Recipient?> _showRecipientSheet(
+      List<_Recipient> recipients, {
+        required Color accent,
+        required IconData icon,
+      }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const wa = Color(0xff25D366);
-    String? selectedId;
+    int? selectedIndex; // index se select karte hain (id khali ho to bhi theek)
 
     return showModalBottomSheet<_Recipient>(
       context: context,
@@ -175,9 +191,8 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheet) {
-            final selected = selectedId == null
-                ? null
-                : recipients.firstWhere((r) => r.id == selectedId);
+            final selected =
+            selectedIndex == null ? null : recipients[selectedIndex!];
 
             return Container(
               constraints: BoxConstraints(
@@ -213,7 +228,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      const Icon(Icons.chat_rounded, color: wa, size: 22),
+                      Icon(icon, color: accent, size: 22),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -226,7 +241,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                         ),
                       ),
                       Text(
-                        '${selectedId == null ? 0 : 1}/${recipients.length}',
+                        '${selectedIndex == null ? 0 : 1}/${recipients.length}',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -241,120 +256,13 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                       shrinkWrap: true,
                       itemCount: recipients.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) {
-                        final r = recipients[i];
-                        final isSel = r.id == selectedId;
-
-                        return InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          onTap: () => setSheet(() => selectedId = r.id),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: isSel
-                                  ? wa.withOpacity(.10)
-                                  : (isDark
-                                  ? const Color(0xff0F172A)
-                                  : const Color(0xffF8FAFC)),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: isSel
-                                    ? wa.withOpacity(.6)
-                                    : (isDark
-                                    ? const Color(0xff334155)
-                                    : const Color(0xffE2E8F0)),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  isSel
-                                      ? Icons.radio_button_checked_rounded
-                                      : Icons.radio_button_off_rounded,
-                                  color: isSel
-                                      ? wa
-                                      : (isDark
-                                      ? Colors.white38
-                                      : Colors.black38),
-                                  size: 22,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              r.name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontSize: 14.5,
-                                                fontWeight: FontWeight.w800,
-                                                color: isDark
-                                                    ? Colors.white
-                                                    : AppColors.navy950,
-                                              ),
-                                            ),
-                                          ),
-                                          if (r.isPrimary) ...[
-                                            const SizedBox(width: 6),
-                                            Container(
-                                              padding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: wa.withOpacity(.15),
-                                                borderRadius:
-                                                BorderRadius.circular(6),
-                                              ),
-                                              child: const Text(
-                                                'Primary Admin',
-                                                style: TextStyle(
-                                                  fontSize: 9.5,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: Color(0xff15803D),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                      const SizedBox(height: 3),
-                                      if (r.roleLabel.isNotEmpty)
-                                        Text(
-                                          r.roleLabel,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: isDark
-                                                ? Colors.white60
-                                                : Colors.black54,
-                                          ),
-                                        ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        r.phone,
-                                        style: TextStyle(
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: isDark
-                                              ? Colors.white70
-                                              : Colors.black87,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
+                      itemBuilder: (_, i) => _recipientTile(
+                        recipients[i],
+                        selected: i == selectedIndex,
+                        accent: accent,
+                        isDark: isDark,
+                        onTap: () => setSheet(() => selectedIndex = i),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -372,9 +280,9 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: wa,
+                        backgroundColor: accent,
                         foregroundColor: Colors.white,
-                        disabledBackgroundColor: wa.withOpacity(.3),
+                        disabledBackgroundColor: accent.withOpacity(.3),
                         disabledForegroundColor: Colors.white70,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
@@ -396,6 +304,110 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
     );
   }
 
+  Widget _recipientTile(
+      _Recipient r, {
+        required bool selected,
+        required Color accent,
+        required bool isDark,
+        required VoidCallback onTap,
+      }) {
+    final badgeText = Color.lerp(accent, Colors.black, .35)!;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected
+              ? accent.withOpacity(.10)
+              : (isDark ? const Color(0xff0F172A) : const Color(0xffF8FAFC)),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? accent.withOpacity(.6)
+                : (isDark ? const Color(0xff334155) : const Color(0xffE2E8F0)),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_off_rounded,
+              color: selected
+                  ? accent
+                  : (isDark ? Colors.white38 : Colors.black38),
+              size: 22,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          r.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : AppColors.navy950,
+                          ),
+                        ),
+                      ),
+                      if (r.isPrimary) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: accent.withOpacity(.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'Primary Admin',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: badgeText,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  if (r.roleLabel.isNotEmpty)
+                    Text(
+                      r.roleLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white60 : Colors.black54,
+                      ),
+                    ),
+                  const SizedBox(height: 2),
+                  Text(
+                    r.phone,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// "9654008400" -> "919654008400"
   String _waPhone(String raw) {
     var p = raw.replaceAll(RegExp(r'\D'), '');
     if (p.length == 11 && p.startsWith('0')) p = p.substring(1);
@@ -403,10 +415,10 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
     return p;
   }
 
-  // Report generate karo + selected recipient ki chat open karo
-  Future<void> _sendWhatsApp(_Recipient r) async {
+  /// Report generate karo + selected recipient ko WhatsApp / SMS se bhejo.
+  Future<void> _sendToRecipient(String channel, _Recipient r) async {
     if (_sharingChannel != null) return;
-    setState(() => _sharingChannel = 'whatsapp');
+    setState(() => _sharingChannel = channel);
 
     try {
       final token = await _getToken();
@@ -422,10 +434,10 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
         body: jsonEncode({
           'searchItem': widget.item.toJson(),
           'traceMode': 'ONLINE',
-          'shareChannel': 'whatsapp',
+          'shareChannel': channel,
           'recipientId': r.id,
           'recipientPhone': r.phone,
-          'loadedDetails': _loadedCtrl.text.trim(), // ← NEW
+          'loadedDetails': _loadedCtrl.text.trim(),
         }),
       )
           .timeout(const Duration(seconds: 30));
@@ -457,21 +469,41 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
         return;
       }
 
-      final message = _withLoaded(baseMessage); // ← NEW
+      final message = _withLoaded(baseMessage);
 
-      final phone = _waPhone(r.phone);
-      final uri = Uri.parse(
-          'https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
-
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!ok) _showSnack('Could not open WhatsApp', isError: true);
+      if (channel == 'sms') {
+        await _openSms(r, message);
+      } else {
+        await _openWhatsApp(r, message);
+      }
     } catch (e) {
-      debugPrint('SHARE WHATSAPP ERROR: $e');
+      debugPrint('SHARE $channel ERROR: $e');
       if (!mounted) return;
       _showSnack('Something went wrong. Please try again.', isError: true);
     } finally {
       if (mounted) setState(() => _sharingChannel = null);
     }
+  }
+
+  Future<void> _openWhatsApp(_Recipient r, String message) async {
+    final uri = Uri.parse(
+      'https://wa.me/${_waPhone(r.phone)}?text=${Uri.encodeComponent(message)}',
+    );
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok) _showSnack('Could not open WhatsApp', isError: true);
+  }
+
+  Future<void> _openSms(_Recipient r, String message) async {
+    // Uri(queryParameters:) space ko '+' bana deta hai, isliye string
+    // khud banate hain. Android: sms:NUMBER?body=...  iOS: sms:NUMBER&body=...
+    final isIos = Theme.of(context).platform == TargetPlatform.iOS;
+    final sep = isIos ? '&' : '?';
+    final uri = Uri.parse(
+      'sms:+${_waPhone(r.phone)}${sep}body=${Uri.encodeComponent(message)}',
+    );
+
+    final ok = await launchUrl(uri);
+    if (!ok) _showSnack('Could not open messaging app', isError: true);
   }
 
   // ───────────────────────── Helpers ─────────────────────────
@@ -508,38 +540,32 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       );
   }
 
-  // ───────────────────────── Email / SMS ─────────────────────────
+  // ───────────────────────── Email ─────────────────────────
 
-  Future<void> _shareReport(String channel) async {
+  Future<void> _shareEmail() async {
     if (_sharingChannel != null) return;
     FocusScope.of(context).unfocus();
 
-    setState(() => _sharingChannel = channel);
+    setState(() => _sharingChannel = 'email');
 
     try {
       final token = await _getToken();
 
-      final headers = <String, String>{
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      };
-
-      if (token != null && token.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $token';
-      }
-
-      final payload = {
-        'searchItem': widget.item.toJson(),
-        'traceMode': 'ONLINE',
-        'shareChannel': channel,
-        'loadedDetails': _loadedCtrl.text.trim(), // ← NEW
-      };
-
       final response = await http
           .post(
         Uri.parse(_confirmationsUrl),
-        headers: headers,
-        body: jsonEncode(payload),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          if (token != null && token.isNotEmpty)
+            'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'searchItem': widget.item.toJson(),
+          'traceMode': 'ONLINE',
+          'shareChannel': 'email',
+          'loadedDetails': _loadedCtrl.text.trim(),
+        }),
       )
           .timeout(const Duration(seconds: 30));
 
@@ -574,41 +600,13 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       }
 
       final message = _withLoaded(traceReport['message']?.toString() ?? '');
-      final adminPhone = traceReport['adminPhone']?.toString() ?? '';
-      final whatsAppUrl = traceReport['whatsAppUrl']?.toString() ?? '';
-
-      switch (channel) {
-        case 'whatsapp':
-          await _openWhatsApp(whatsAppUrl);
-          break;
-        case 'email':
-          await _openEmail(message: message);
-          break;
-        case 'sms':
-          await _openSms(phone: adminPhone, message: message);
-          break;
-      }
-    } on Exception catch (e) {
-      debugPrint('❌ SHARE REPORT ERROR: $e');
+      await _openEmail(message: message);
+    } catch (e) {
+      debugPrint('SHARE EMAIL ERROR: $e');
       if (!mounted) return;
       _showSnack('Something went wrong. Please try again.', isError: true);
     } finally {
       if (mounted) setState(() => _sharingChannel = null);
-    }
-  }
-
-  Future<void> _openWhatsApp(String whatsAppUrl) async {
-    if (whatsAppUrl.isEmpty) {
-      _showSnack('WhatsApp link not available', isError: true);
-      return;
-    }
-
-    final uri = Uri.parse(whatsAppUrl);
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      _showSnack('Could not open WhatsApp', isError: true);
     }
   }
 
@@ -625,26 +623,6 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       await launchUrl(uri);
     } else {
       _showSnack('No email app found on this device', isError: true);
-    }
-  }
-
-  Future<void> _openSms(
-      {required String phone, required String message}) async {
-    if (phone.isEmpty) {
-      _showSnack('Admin phone number not available', isError: true);
-      return;
-    }
-
-    final uri = Uri(
-      scheme: 'sms',
-      path: phone,
-      queryParameters: {'body': message},
-    );
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else {
-      _showSnack('Could not open messaging app', isError: true);
     }
   }
 
@@ -888,8 +866,8 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
               channel: 'whatsapp',
               label: 'WhatsApp',
               icon: Icons.chat_rounded,
-              color: const Color(0xff25D366),
-              onTap: _handleWhatsAppTap,
+              color: _waColor,
+              onTap: () => _handleRecipientTap('whatsapp'),
             ),
           ),
           const SizedBox(width: 10),
@@ -899,7 +877,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
               label: 'Email',
               icon: Icons.email_rounded,
               color: AppColors.blue600,
-              onTap: () => _shareReport('email'),
+              onTap: _shareEmail,
             ),
           ),
           const SizedBox(width: 10),
@@ -908,8 +886,8 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
               channel: 'sms',
               label: 'SMS',
               icon: Icons.sms_rounded,
-              color: const Color(0xffF59E0B),
-              onTap: () => _shareReport('sms'),
+              color: _smsColor,
+              onTap: () => _handleRecipientTap('sms'),
             ),
           ),
         ],

@@ -1,10 +1,3 @@
-// pubspec.yaml needs: geolocator, http, shared_preferences
-//   flutter pub add geolocator
-//
-// Use:
-//   login success / auto-login : await LocationTrackingService.instance.start(context);
-//   logout                     : await LocationTrackingService.instance.stop();
-
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -84,7 +77,7 @@ class LocationTrackingService {
         distanceFilter: _minDistanceMeters,
         intervalDuration: const Duration(seconds: 30),
         // Foreground service: app minimize hone par bhi location chalti rahegi.
-        foregroundNotificationConfig: ForegroundNotificationConfig(
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: 'FastRecovery',
           notificationText: 'Location sharing is active',
           enableWakeLock: false,
@@ -112,13 +105,16 @@ class LocationTrackingService {
     // 1. GPS on hai?
     if (!await Geolocator.isLocationServiceEnabled()) {
       if (!context.mounted) return false;
-      final open = await _dialog(
+      final open = await showConfirmDialog(
         context,
         title: 'Turn on GPS',
         message: 'Please turn on device location (GPS) to continue.',
-        action: 'Open Settings',
+        confirmText: 'Open Settings',
+        icon: Icons.location_off_rounded,
+        tone: ConfirmTone.warning,
+        barrierDismissible: false,
       );
-      if (open == true) await Geolocator.openLocationSettings();
+      if (open) await Geolocator.openLocationSettings();
       return false;
     }
 
@@ -128,60 +124,39 @@ class LocationTrackingService {
     //    zaroori), phir system ka popup.
     if (perm == LocationPermission.denied) {
       if (!context.mounted) return false;
-      final agree = await _dialog(
+      final agree = await showConfirmDialog(
         context,
         title: 'Location permission',
         message: _disclosure,
-        action: 'Allow',
-        cancel: 'Not now',
+        confirmText: 'Allow',
+        cancelText: 'Not now',
+        icon: Icons.my_location_rounded,
+        tone: ConfirmTone.primary,
+        barrierDismissible: false,
       );
-      if (agree != true) return false;
+      if (!agree) return false;
       perm = await Geolocator.requestPermission();
     }
 
     // 3. "Don't ask again" ho chuka hai -> sirf app settings se on hoga.
     if (perm == LocationPermission.deniedForever) {
       if (!context.mounted) return false;
-      final open = await _dialog(
+      final open = await showConfirmDialog(
         context,
         title: 'Location permission needed',
-        message:
-        'Location permission is turned off for this app. Please enable it from App Settings.',
-        action: 'Open App Settings',
+        message: 'Location permission is turned off for this app. '
+            'Please enable it from App Settings.',
+        confirmText: 'Open App Settings',
+        icon: Icons.lock_outline_rounded,
+        tone: ConfirmTone.warning,
+        barrierDismissible: false,
       );
-      if (open == true) await Geolocator.openAppSettings();
+      if (open) await Geolocator.openAppSettings();
       return false;
     }
 
     return perm == LocationPermission.whileInUse ||
         perm == LocationPermission.always;
-  }
-
-  Future<bool?> _dialog(
-      BuildContext context, {
-        required String title,
-        required String message,
-        required String action,
-        String cancel = 'Cancel',
-      }) {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(action),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _sendNow() async {
@@ -221,5 +196,194 @@ class LocationTrackingService {
     } finally {
       _sending = false;
     }
+  }
+}
+
+/// Dialog ka rang / mood.
+enum ConfirmTone { primary, danger, success, warning }
+
+extension _ToneColor on ConfirmTone {
+  Color get color => switch (this) {
+    ConfirmTone.primary => const Color(0xff2563EB),
+    ConfirmTone.danger => const Color(0xffEF4444),
+    ConfirmTone.success => const Color(0xff16A34A),
+    ConfirmTone.warning => const Color(0xffF59E0B),
+  };
+}
+
+/// Confirm dialog dikhata hai. User "confirm" dabaye to `true`,
+/// cancel ya bahar tap kare to `false` milta hai.
+///
+/// final ok = await showConfirmDialog(
+///   context,
+///   title: 'Block user?',
+///   message: 'Are you sure you want to block "Ashwani"?',
+///   confirmText: 'Block',
+///   icon: Icons.block_rounded,
+///   tone: ConfirmTone.danger,
+/// );
+/// if (ok) { ... }
+Future<bool> showConfirmDialog(
+    BuildContext context, {
+      required String title,
+      required String message,
+      String confirmText = 'Confirm',
+      String cancelText = 'Cancel',
+      IconData icon = Icons.help_outline_rounded,
+      ConfirmTone tone = ConfirmTone.primary,
+      bool barrierDismissible = true,
+    }) async {
+  final result = await showDialog<bool>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    barrierColor: Colors.black.withOpacity(.5),
+    builder: (_) => ConfirmDialog(
+      title: title,
+      message: message,
+      confirmText: confirmText,
+      cancelText: cancelText,
+      icon: icon,
+      tone: tone,
+    ),
+  );
+  return result ?? false;
+}
+
+class ConfirmDialog extends StatelessWidget {
+  final String title;
+  final String message;
+  final String confirmText;
+  final String cancelText;
+  final IconData icon;
+  final ConfirmTone tone;
+
+  const ConfirmDialog({
+    super.key,
+    required this.title,
+    required this.message,
+    required this.confirmText,
+    required this.cancelText,
+    required this.icon,
+    required this.tone,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final color = tone.color;
+
+    final surface = dark ? const Color(0xff111827) : Colors.white;
+    final titleColor = dark ? Colors.white : const Color(0xff0F172A);
+    final bodyColor = dark ? const Color(0xff9AA7C0) : const Color(0xff64748B);
+    final borderColor = dark ? const Color(0xff334155) : const Color(0xffCBD5E1);
+
+    return Dialog(
+      backgroundColor: surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 8,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 380),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon: bahar halka ring, andar gol rang wala badge
+              Container(
+                width: 82,
+                height: 82,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(dark ? .16 : .10),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Container(
+                    width: 58,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(dark ? .30 : .18),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, size: 30, color: color),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: titleColor,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.45,
+                      color: bodyColor,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 26),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: titleColor,
+                          side: BorderSide(color: borderColor),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        child: Text(cancelText),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: color,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        child: Text(confirmText),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
