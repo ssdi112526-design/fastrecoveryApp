@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "594507090266",
+    "project_id": "fastrecovery-f7ec1",
+    "storage_bucket": "fastrecovery-f7ec1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:594507090266:android:d88c533ba97c69fd32cb63",
+        "android_client_info": {
+          "package_name": "com.example.fastrecovery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDsQDrPM1V59OSNvAA1gJq-VpV04dcCn64"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

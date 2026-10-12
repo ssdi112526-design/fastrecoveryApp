@@ -1,3 +1,5 @@
+// import 'package:firebase_core/firebase_core.dart';
+// import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:kartikrepoagency/Screen/Dashboard.dart';
 import 'Service/SharedPreferenceService.dart';
@@ -7,6 +9,7 @@ import 'Auth/Login/Login_page.dart';
 // Global theme notifier
  final ValueNotifier<ThemeMode> themeNotifier =
  ValueNotifier(ThemeMode.light);
+
 
   Future<void> main() async {
     WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +26,11 @@ import 'Auth/Login/Login_page.dart';
   } else {
     themeNotifier.value = ThemeMode.light;
   }
+    // final fm = FirebaseMessaging.instance;
+    // await fm.requestPermission();
+    // await fm.setForegroundNotificationPresentationOptions(alert: true, badge: true, sound: true);
+    // debugPrint('FCM TOKEN: ${await fm.getToken()}');
+    // // ------------------------------------------------
 
   runApp(const MyApp());
 }
@@ -48,11 +56,8 @@ class MyApp extends StatelessWidget {
       builder: (context, currentMode, _) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-
           title: 'Fast Recovery',
-
           themeMode: currentMode,
-
           // =========================
           // LIGHT THEME
           // =========================
@@ -64,7 +69,6 @@ class MyApp extends StatelessWidget {
             ),
             useMaterial3: true,
           ),
-
           // =========================
           // DARK THEME
           // =========================
@@ -76,7 +80,6 @@ class MyApp extends StatelessWidget {
             ),
             useMaterial3: true,
           ),
-
           // =========================
           // ROUTES
           // =========================
@@ -85,7 +88,6 @@ class MyApp extends StatelessWidget {
             '/login': (_) => const LoginScreen(),
             '/home': (_) => const AgencyDashboardPage(),
           },
-
           // App always starts from Splash
           initialRoute: '/splash',
         );
