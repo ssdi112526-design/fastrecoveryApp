@@ -1,13 +1,10 @@
 import 'dart:convert';
-
+import 'package:fastrecovery/Screen/Banker_page.dart' hide AppColors;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:kartikrepoagency/Screen/Profile_page.dart';
-import 'package:kartikrepoagency/Screen/Setting_page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-
 import '../../Model_class/Proffile_model.dart';
 import '../../theme/app_theme.dart';
 import '../Auth/Login/Login_page.dart';
@@ -16,6 +13,9 @@ import '../Service/SharedPreferenceService.dart';
 import '../main.dart';
 import 'Find_vehicle.dart';
 import 'ID_card.dart';
+import 'Profile_page.dart';
+import 'Setting_page.dart';
+import 'Total_Seized.dart';
 
 class AgencyDashboardPage extends StatefulWidget {
   const AgencyDashboardPage({super.key});
@@ -430,12 +430,16 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     final secondaryText =
     isDark ? const Color(0xff8F9DB5) : const Color(0xff64748B);
 
+
     final drawerItems = [
-      (icon: Icons.dashboard_rounded, title: 'Dashboard'),
-      (icon: Icons.directions_car_filled_rounded, title: 'Find Vehicle'),
-      (icon: Icons.badge_rounded, title: 'ID Card'),
-      (icon: Icons.person_rounded, title: 'Profile'),
-      (icon: Icons.settings_rounded, title: 'Setting'),
+      (icon: Icons.dashboard_rounded, title: 'Dashboard', color: Colors.blue, ),
+      (icon: Icons.directions_car_filled_rounded, title: 'Find Vehicle', color: Colors.orange, ),
+      (icon: Icons.badge_rounded, title: 'ID Card', color: Colors.purple, ),
+      (icon: Icons.person_rounded, title: 'Profile', color: Colors.teal,),
+      (icon: Icons.car_crash_rounded, title: 'Total Seized Vehicle', color: Colors.red, ),
+      (icon: Icons.account_balance_rounded, title: 'Bank / NBFC Repo', color: Colors.indigo, ),
+      (icon: Icons.settings_rounded, title: 'Setting', color: Colors.blueGrey,
+      ),
     ];
 
     return Drawer(
@@ -586,7 +590,20 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                               Navigator.of(context).push(
                                 MaterialPageRoute(builder: (_) => HomeScreen()),
                               );
+
+                              case 'Total Seized Vehicle':
+                              Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => SeizedSuccessfullyScreen()),
+                              );
                               break;
+
+                            case 'Bank / NBFC Repo':
+                              final token = SharedPreferenceService.getToken();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => BankRepoListPage(token: token,)),
+                            );
+                            break;
+
                             case 'Setting':
                               _openSettings();
                               break;

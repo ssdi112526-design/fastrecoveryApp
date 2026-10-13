@@ -39,7 +39,7 @@ class ForgotPasswordScreen extends StatelessWidget {
                   PrimaryButton(
                     label: 'Send OTP',
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const OtpScreen(fromSignup: false)),
+                      MaterialPageRoute(builder: (_) => const OtpScreen(fromSignup: false,)),
                     ),
                   ),
                 ],

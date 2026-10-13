@@ -1,7 +1,7 @@
 // import 'package:firebase_core/firebase_core.dart';
 // import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
-import 'package:kartikrepoagency/Screen/Dashboard.dart';
+import 'Screen/Dashboard.dart';
 import 'Service/SharedPreferenceService.dart';
 import 'Splash_screen/Splash_screen.dart';
 import 'Auth/Login/Login_page.dart';
