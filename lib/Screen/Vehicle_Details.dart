@@ -681,22 +681,20 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                   const SizedBox(height: 10),
                   _detailGrid([
                     (
-                    Icons.directions_car_outlined,
-                    'Vehicle Number',
-                    item.vehicleNumber
+                    Icons.directions_car_outlined, 'Vehicle Number', item.vehicleNumber
                     ),
                     (
-                    Icons.confirmation_number_outlined,
-                    'Chassis Number',
-                    item.chassisNumber
+                    Icons.confirmation_number_outlined, 'Chassis Number', item.chassisNumber
                     ),
                     (
-                    Icons.settings_outlined,
-                    'Engine Number',
-                    item.engineNumber
+                    Icons.settings_outlined, 'Engine Number', item.engineNumber
                     ),
-                    (Icons.category_outlined, 'Brand', item.vehicleBrand),
-                    (Icons.car_repair_outlined, 'Model', item.vehicleModel),
+                    (
+                    Icons.category_outlined, 'Brand', item.vehicleBrand
+                    ),
+                    (
+                    Icons.car_repair_outlined, 'Model', item.vehicleModel
+                    ),
                   ]),
                   const SizedBox(height: 18),
                   _popupSection('Loaded Details', Icons.edit_note_rounded),
@@ -707,11 +705,9 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                   const SizedBox(height: 10),
                   _detailGrid([
                     (
-                    Icons.flag_outlined,
-                    'Confirmation Status',
-                    item.confirmationStatus
+                    Icons.flag_outlined, 'Confirmation Status', item.confirmationStatus
                     ),
-                    (Icons.info_outline, 'Repo Status', item.repoStatus),
+                    (Icons.info_outline, 'Status', item.repoStatus),
                   ]),
                   const SizedBox(height: 16),
                 ],

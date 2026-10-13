@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:kartikrepoagency/Screen/Profile_page.dart';
 import 'package:kartikrepoagency/Screen/Setting_page.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -1303,15 +1304,39 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
 // DRAWER FOOTER (Terms & Conditions, Privacy Policy, App version)
 // =============================================================
 
-class DrawerFooter extends StatelessWidget {
+class DrawerFooter extends StatefulWidget {
   const DrawerFooter({super.key});
 
-  // TODO: apne real links daal do
-  static const String _termsUrl = 'https://www.fastrecovery.in/terms';
-  // static const String _privacyUrl = 'https://www.fastrecovery.in/privacy';
-  static const String _appVersion = 'v1.0.0';
+  @override
+  State<DrawerFooter> createState() => _DrawerFooterState();
+}
 
-  Future<void> _open(BuildContext context, String url) async {
+class _DrawerFooterState extends State<DrawerFooter> {
+  static const String _termsUrl = 'https://www.fastrecovery.in/terms';
+
+  // '...' = padh raha hai, '—' = padhne me error aaya (debug console dekho)
+  String _version = '...';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() => _version = 'v${info.version}');
+    } catch (e) {
+      // Aam wajah: plugin ke baad sirf hot reload kiya, full restart nahi.
+      debugPrint('APP VERSION ERROR: $e');
+      if (!mounted) return;
+      setState(() => _version = '—');
+    }
+  }
+
+  Future<void> _open(String url) async {
     bool opened = false;
     try {
       opened = await launchUrl(
@@ -1322,7 +1347,7 @@ class DrawerFooter extends StatelessWidget {
       opened = false;
     }
 
-    if (!opened && context.mounted) {
+    if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Could not open link'),
@@ -1339,40 +1364,8 @@ class DrawerFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final linkColor =
-    isDark ? const Color(0xff9CAAC4) : const Color(0xff64748B);
     final mutedText =
     isDark ? const Color(0xff6B7893) : const Color(0xff94A3B8);
-
-    Widget link(String label, String url) {
-      return InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () => _open(context, url),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.open_in_new_rounded,
-                  size: 16, color: AppColors.blue600),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.blue600,
-                  decoration: TextDecoration.underline,
-                  decorationColor: AppColors.blue600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1387,11 +1380,37 @@ class DrawerFooter extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        link('Terms & Conditions', _termsUrl),
+        InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _open(_termsUrl),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 22, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.open_in_new_rounded,
+                    size: 16, color: AppColors.blue600),
+                SizedBox(width: 6),
+                Text(
+                  'Terms & Conditions',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blue600,
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppColors.blue600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(22, 6, 22, 16),
           child: Text(
-            'App Version $_appVersion',
+            'App Version $_version',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14.5,
