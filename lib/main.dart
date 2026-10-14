@@ -1,5 +1,6 @@
 // import 'package:firebase_core/firebase_core.dart';
 // import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:fastrecovery/Screen/Find_vehicle.dart';
 import 'package:flutter/material.dart';
 import 'Screen/Dashboard.dart';
 import 'Service/SharedPreferenceService.dart';
@@ -86,7 +87,7 @@ class MyApp extends StatelessWidget {
           routes: {
             '/splash': (_) => const SplashScreen(),
             '/login': (_) => const LoginScreen(),
-            '/home': (_) => const AgencyDashboardPage(),
+            '/home': (_) => const HomeScreen(),
           },
           // App always starts from Splash
           initialRoute: '/splash',

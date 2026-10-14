@@ -1,21 +1,15 @@
 import 'dart:convert';
-import 'package:fastrecovery/Screen/Banker_page.dart' hide AppColors;
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../Model_class/Proffile_model.dart';
 import '../../theme/app_theme.dart';
-import '../Auth/Login/Login_page.dart';
 import '../Service/Location_tracking_permission.dart';
-import '../Service/SharedPreferenceService.dart';
-import '../main.dart';
-import 'Find_vehicle.dart';
-import 'ID_card.dart';
 import 'Profile_page.dart';
-import 'Setting_page.dart';
-import 'Total_Seized.dart';
 
 class AgencyDashboardPage extends StatefulWidget {
   const AgencyDashboardPage({super.key});
@@ -28,32 +22,25 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     with SingleTickerProviderStateMixin {
   static const String _baseUrl = 'https://www.fastrecovery.in';
   static const String _kProfileCache = 'dashboard_profile_cache';
+  static const String _kDashboardUnlocked = 'dashboard_unlocked';
 
-  bool _loading = true;
-  bool _userDataLoading = true;
+  // ── Loading flags ──
+  bool _loading = true; // profile
+  bool _statsLoading = true; // confirmation stats
 
-  // Profile/company data — same typed model jo Profile screen use karti hai.
+  // ── Profile / company ──
   UserModel? _user;
-
   String _companyName = 'Company';
   String _location = '';
-  List<String> _phones = [];
   String _displayPhone = '';
 
-  // Local values
-  String _syncCode = '----';
-  String _agencyTag = '';
+  // ── Local values (SharedPreferences) ──
   int _remainingDays = 0;
   int _offlineRecords = 0;
 
-  int _drawerIndex = 0;
-
-  // API stats (future use, abhi screen par nahi dikh rahe)
-  int _totalCases = 0;
-  int _todayActivity = 0;
+  // ── API stats ──
   int _pendingConfirmations = 0;
   int _inventoryConfirmed = 0;
-  int _totalConfirmations = 0;
   int _confirmedConfirmations = 0;
 
   late final AnimationController _pageAnimationController;
@@ -69,7 +56,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      LocationTrackingService.instance.start(context);
+      if (mounted) LocationTrackingService.instance.start(context);
     });
 
     _pageAnimationController = AnimationController(
@@ -96,47 +83,18 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   }
 
   // =========================================================
-  // LOGOUT + SETTINGS
-  // =========================================================
-
-  Future<void> _logout(BuildContext context) async {
-    await LocationTrackingService.instance.stop();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear(); // saara saved data clear (token, role, name, etc.)
-
-    if (!context.mounted) return;
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-          (route) => false,
-    );
-  }
-
-  void _openSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SettingsPage(onLogout: () => _logout(context)),
-      ),
-    );
-  }
-
-  // =========================================================
-  // SMALL HELPERS
+  // HELPERS
   // =========================================================
 
   String _initials(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return 'RA';
-
     final words =
-    trimmed.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
 
+    if (words.isEmpty) return 'RA';
     if (words.length == 1) {
-      return words[0]
-          .substring(0, words[0].length >= 2 ? 2 : 1)
-          .toUpperCase();
+      final w = words[0];
+      return w.substring(0, w.length >= 2 ? 2 : 1).toUpperCase();
     }
-
     return (words[0][0] + words[1][0]).toUpperCase();
   }
 
@@ -146,34 +104,35 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
-  Future<void> toggleTheme(bool isDark) async {
-    themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
-
-    await SharedPreferenceService.setString(
-      'theme_mode',
-      isDark ? 'dark' : 'light',
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
     );
   }
 
   // =========================================================
-  // PROFILE API — Profile screen wala hi endpoint / model
-  //
-  // GET /api/auth/profile  ->  ProfileResponse -> UserModel
+  // DATA LOADING
   // =========================================================
 
   void _applyUser(UserModel? user) {
     _user = user;
-    _userDataLoading = false;
     _companyName = _extractCompanyName(user);
-    _phones = _extractPhones(user);
-    _displayPhone = _phones.join('  •  ');
+    _displayPhone = _extractPhones(user).join('  •  ');
     _location = _extractLocation(user);
   }
 
   Future<void> _loadDashboardData() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // 1) Local data + saved profile turant dikhao
+    // 1) Local values + saved profile turant dikhao
     UserModel? cached;
     final raw = prefs.getString(_kProfileCache);
     if (raw != null) {
@@ -184,68 +143,71 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       } catch (_) {}
     }
 
-    if (mounted) {
-      setState(() {
-        _remainingDays = prefs.getInt('remainingDays') ?? 0;
-        _offlineRecords = prefs.getInt('offlineRecords') ?? 0;
-        _syncCode = prefs.getString('syncCode') ?? '----';
-        _agencyTag = prefs.getString('agencyTag') ?? '';
+    if (!mounted) return;
+    setState(() {
+      _remainingDays = prefs.getInt('remainingDays') ?? 0;
+      _offlineRecords = prefs.getInt('offlineRecords') ?? 0;
 
-        if (cached != null) {
-          _applyUser(cached);
-          _loading = false;
-        } else {
-          _loading = true;
-        }
+      if (cached != null) {
+        _applyUser(cached);
+        _loading = false;
+      }
+    });
+
+    // 2) Token check
+    final token = (prefs.getString('token') ?? '').trim();
+    if (token.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _statsLoading = false;
       });
+      if (cached == null) _showSnack('Session expired. Please login again.');
+      return;
     }
 
-    // 2) Profile API, background mein refresh
+    final headers = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+
+    // 3) Profile + stats parallel mein
+    await Future.wait([
+      _refreshProfile(headers, prefs, hadCache: cached != null),
+      _loadStats(headers),
+    ]);
+  }
+
+  Future<void> _refreshProfile(
+      Map<String, String> headers,
+      SharedPreferences prefs, {
+        required bool hadCache,
+      }) async {
     try {
-      final token = prefs.getString('token');
-      if (token == null || token.trim().isEmpty) {
-        throw Exception('Authentication token not found');
-      }
-
-      final user = await _getProfile(
-        {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${token.trim()}',
-        },
-        prefs,
-      );
-
+      final user = await _getProfile(headers, prefs);
       if (!mounted) return;
       setState(() {
         _applyUser(user);
         _loading = false;
       });
     } catch (e) {
-      debugPrint('Agency dashboard error: $e');
+      debugPrint('Agency dashboard profile error: $e');
       if (!mounted) return;
-
       setState(() => _loading = false);
 
       // Saved data pehle se dikh raha ho to error mat dikhao
-      if (cached == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e.toString().contains('Session expired')
-                  ? 'Session expired. Please login again.'
-                  : 'Unable to load dashboard data.',
-            ),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
+      if (!hadCache) {
+        _showSnack(
+          e.toString().contains('Session expired')
+              ? 'Session expired. Please login again.'
+              : 'Unable to load dashboard data.',
         );
       }
     }
   }
 
+  /// GET /api/auth/profile -> ProfileResponse -> UserModel
   Future<UserModel?> _getProfile(
       Map<String, String> headers,
       SharedPreferences prefs,
@@ -254,28 +216,83 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
         .get(Uri.parse('$_baseUrl/api/auth/profile'), headers: headers)
         .timeout(const Duration(seconds: 15));
 
-    if (response.statusCode == 401) {
-      throw Exception('Session expired');
-    }
-
+    if (response.statusCode == 401) throw Exception('Session expired');
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Profile API failed: ${response.statusCode}');
     }
 
     final decoded = jsonDecode(response.body);
     final map = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+    final profile = ProfileResponse.fromJson(map);
 
-    final profileResponse = ProfileResponse.fromJson(map);
-
-    if (!profileResponse.success) {
+    if (!profile.success) {
       throw Exception('Profile API returned success=false');
     }
 
     // Agli baar turant dikhane ke liye save karo
     await prefs.setString(_kProfileCache, response.body);
-
-    return profileResponse.user;
+    return profile.user;
   }
+
+  // ── Stats ────────────────────────────────────────────────
+
+  /// Ek stats endpoint. Fail hone par null — baaki cards par asar nahi.
+  Future<Map<String, dynamic>?> _fetchStat(
+      String path,
+      Map<String, String> headers,
+      ) async {
+    try {
+      final res = await http
+          .get(Uri.parse('$_baseUrl$path'), headers: headers)
+          .timeout(const Duration(seconds: 20));
+
+      debugPrint('[DASHBOARD STATS] $path -> ${res.statusCode} | ${res.body}');
+
+      if (res.statusCode < 200 || res.statusCode >= 300) return null;
+
+      final body = jsonDecode(res.body);
+      if (body is Map && body['success'] == true && body['data'] is Map) {
+        return Map<String, dynamic>.from(body['data'] as Map);
+      }
+    } catch (e) {
+      debugPrint('[DASHBOARD STATS] $path ERROR: $e');
+    }
+    return null;
+  }
+
+  Future<void> _loadStats(Map<String, String> headers) async {
+    final results = await Future.wait([
+      _fetchStat('/api/confirmations/stats/pending-count', headers),
+      _fetchStat('/api/confirmations/stats/inventory-confirmed-count', headers),
+      _fetchStat('/api/confirmations/stats/count', headers),
+    ]);
+
+    final pending = results[0];
+    final inventory = results[1];
+    final count = results[2];
+
+    if (!mounted) return;
+    setState(() {
+      // Fail hone par purani value rakho
+      if (pending != null) {
+        _pendingConfirmations = _toInt(pending['pendingConfirmations']);
+      }
+      if (inventory != null) {
+        _inventoryConfirmed = _toInt(inventory['inventoryConfirmed']);
+      }
+      if (count != null) {
+        _confirmedConfirmations = _toInt(
+          count['confirmedConfirmations'] ??
+              count['confirmed'] ??
+              count['confirmedCount'] ??
+              count['CONFIRMED'],
+        );
+      }
+      _statsLoading = false;
+    });
+  }
+
+  // ── Extractors ───────────────────────────────────────────
 
   // Priority: company.companyName -> user.agencyName -> fallback
   String _extractCompanyName(UserModel? user) {
@@ -295,7 +312,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     if (userPhone.isNotEmpty) phones.add(userPhone);
 
     final secondNumber = user?.secondAgencyNumber.trim() ?? '';
-    if (secondNumber.isNotEmpty && secondNumber != userPhone) {
+    if (secondNumber.isNotEmpty && !phones.contains(secondNumber)) {
       phones.add(secondNumber);
     }
 
@@ -315,59 +332,8 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     final city = user?.city.trim() ?? '';
     if (city.isNotEmpty) return city;
 
-    final companyAddress = user?.company?.address.trim() ?? '';
-    if (companyAddress.isNotEmpty) return companyAddress;
-
-    return '';
+    return user?.company?.address.trim() ?? '';
   }
-
-  // =========================================================
-  // STATS APIs (future use)
-  // =========================================================
-
-  Future<Map<String, dynamic>> _getStats(
-      String path,
-      String name,
-      Map<String, String> headers,
-      ) async {
-    final response = await http.get(
-      Uri.parse('$_baseUrl$path'),
-      headers: headers,
-    );
-
-    if (response.statusCode == 401) {
-      throw Exception('Session expired');
-    }
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('$name API failed: ${response.statusCode}');
-    }
-
-    final body = jsonDecode(response.body);
-
-    if (body['success'] != true) {
-      throw Exception('$name API returned success=false');
-    }
-
-    return Map<String, dynamic>.from(body['data'] ?? {});
-  }
-
-  Future<Map<String, dynamic>> _getOverviewStats(Map<String, String> h) =>
-      _getStats('/api/repo-cases/stats/overview', 'Overview', h);
-
-  Future<Map<String, dynamic>> _getPendingConfirmations(
-      Map<String, String> h) =>
-      _getStats('/api/confirmations/stats/pending-count', 'Pending', h);
-
-  Future<Map<String, dynamic>> _getInventoryConfirmed(Map<String, String> h) =>
-      _getStats(
-        '/api/confirmations/stats/inventory-confirmed-count',
-        'Inventory',
-        h,
-      );
-
-  Future<Map<String, dynamic>> _getConfirmationCount(Map<String, String> h) =>
-      _getStats('/api/confirmations/stats/count', 'Confirmation count', h);
 
   // =========================================================
   // BUILD
@@ -380,7 +346,6 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     return Scaffold(
       backgroundColor:
       isDark ? const Color(0xff080D18) : const Color(0xffF5F7FB),
-      drawer: _buildDrawer(),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadDashboardData,
@@ -404,7 +369,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                     const SizedBox(height: 16),
                     _buildActionsRow(isDark),
                     const SizedBox(height: 16),
-                    _buildControlPanel(isDark),
+                    _buildStatsRow(isDark),
                     const SizedBox(height: 100),
                     _buildFooter(isDark),
                   ],
@@ -418,296 +383,23 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   }
 
   // =========================================================
-  // DRAWER
-  // =========================================================
-
-  Widget _buildDrawer() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final background =
-    isDark ? const Color(0xff0A1220) : const Color(0xffF8FAFC);
-    final primaryText = isDark ? Colors.white : const Color(0xff0F172A);
-    final secondaryText =
-    isDark ? const Color(0xff8F9DB5) : const Color(0xff64748B);
-
-
-    final drawerItems = [
-      (icon: Icons.dashboard_rounded, title: 'Dashboard', color: Colors.blue, ),
-      (icon: Icons.directions_car_filled_rounded, title: 'Find Vehicle', color: Colors.orange, ),
-      (icon: Icons.badge_rounded, title: 'ID Card', color: Colors.purple, ),
-      (icon: Icons.person_rounded, title: 'Profile', color: Colors.teal,),
-      (icon: Icons.car_crash_rounded, title: 'Total Seized Vehicle', color: Colors.red, ),
-      (icon: Icons.account_balance_rounded, title: 'Bank / NBFC Repo', color: Colors.indigo, ),
-      (icon: Icons.settings_rounded, title: 'Setting', color: Colors.blueGrey,
-      ),
-    ];
-
-    return Drawer(
-      width: 292,
-      backgroundColor: background,
-      elevation: 20,
-      child: SafeArea(
-        child: Column(
-          children: [
-            // ── HEADER ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-              child: Container(
-                padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: isDark
-                        ? [const Color(0xff13294B), const Color(0xff0E1A31)]
-                        : [const Color(0xffEEF5FF), Colors.white],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withOpacity(.08)
-                        : const Color(0xffDDE7F3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.blueGradient,
-                        borderRadius: BorderRadius.circular(15),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.blue600.withOpacity(.25),
-                            blurRadius: 14,
-                            offset: const Offset(0, 7),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.business_center_rounded,
-                        color: Colors.white,
-                        size: 23,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _userDataLoading
-                          ? const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _ShimmerBox(width: 130, height: 13),
-                          SizedBox(height: 7),
-                          _ShimmerBox(width: 80, height: 10),
-                        ],
-                      )
-                          : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _companyName.isNotEmpty
-                                ? _companyName
-                                : 'Your Agency',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w900,
-                              color: primaryText,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Agency Workspace',
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w600,
-                              color: secondaryText,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // ── MENU TITLE ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 4, 22, 9),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'MAIN MENU',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.1,
-                    color: secondaryText,
-                  ),
-                ),
-              ),
-            ),
-
-            // ── MENU ITEMS ──
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: drawerItems.length,
-                itemBuilder: (itemContext, index) {
-                  final item = drawerItems[index];
-                  final active = index == _drawerIndex;
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(15),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(15),
-                        onTap: () {
-                          setState(() => _drawerIndex = index);
-                          Navigator.of(itemContext).pop(); // drawer band
-
-                          switch (item.title) {
-                            case 'Profile':
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const ProfileScreen(),
-                                ),
-                              );
-                              break;
-                            case 'ID Card':
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const IdCardPage(),
-                                ),
-                              );
-                              break;
-                            case 'Find Vehicle':
-                              Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => HomeScreen()),
-                              );
-
-                              case 'Total Seized Vehicle':
-                              Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => SeizedSuccessfullyScreen()),
-                              );
-                              break;
-
-                            case 'Bank / NBFC Repo':
-                              final token = SharedPreferenceService.getToken();
-                            Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => BankRepoListPage(token: token,)),
-                            );
-                            break;
-
-                            case 'Setting':
-                              _openSettings();
-                              break;
-                            default:
-                              break; // Dashboard: already yahin hain
-                          }
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 220),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 13,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: active
-                                ? AppColors.blue600
-                                .withOpacity(isDark ? .16 : .08)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(15),
-                            border: Border.all(
-                              color: active
-                                  ? AppColors.blue600
-                                  .withOpacity(isDark ? .35 : .18)
-                                  : Colors.transparent,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: active
-                                      ? AppColors.blue600.withOpacity(.12)
-                                      : (isDark
-                                      ? Colors.white.withOpacity(.045)
-                                      : const Color(0xffF1F5F9)),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  item.icon,
-                                  size: 20,
-                                  color: active
-                                      ? (isDark
-                                      ? AppColors.gold400
-                                      : AppColors.blue600)
-                                      : secondaryText,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  item.title,
-                                  style: TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: active
-                                        ? FontWeight.w800
-                                        : FontWeight.w600,
-                                    color:
-                                    active ? primaryText : secondaryText,
-                                  ),
-                                ),
-                              ),
-                              if (active)
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? AppColors.gold400
-                                        : AppColors.blue600,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // ── BOTTOM: Terms & Conditions, Privacy Policy, App version ──
-            const DrawerFooter(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // =========================================================
   // TOP BAR
   // =========================================================
 
   Widget _buildTopBar(bool isDark) {
+    final canPop = Navigator.of(context).canPop();
+    final barColor = isDark ? const Color(0xff10182A) : Colors.white;
     final border = isDark ? const Color(0xff263550) : const Color(0xffE5EAF2);
+    final textColor = isDark ? Colors.white : Colors.black;
+    final backBg = isDark
+        ? Colors.white.withOpacity(.08)
+        : const Color(0xffF3F6FA);
 
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: barColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: border),
         boxShadow: [
@@ -720,50 +412,50 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       ),
       child: Row(
         children: [
-          // MENU
-          Builder(
-            builder: (menuContext) {
-              return Material(
-                color: Colors.transparent,
-                shape: const CircleBorder(),
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: () => Scaffold.of(menuContext).openDrawer(),
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: const BoxDecoration(
-                      color: Color(0xffF3F6FA),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.menu_rounded,
-                      size: 22,
-                      color: Colors.black,
-                    ),
+          // BACK (peeche koi screen ho tabhi dikhao)
+          if (canPop) ...[
+            Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => Navigator.of(context).maybePop(),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: backBg,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    size: 20,
+                    color: textColor,
                   ),
                 ),
-              );
-            },
-          ),
-
-          const SizedBox(width: 12),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ] else
+            const SizedBox(width: 8),
 
           // LOGO + TITLE
           Expanded(
             child: Row(
               children: [
                 Image.asset(
-                  'assets/images/fastrecovery_logo-2.png',
+                  isDark
+                      ? 'assets/images/fastrecovery_logo_2dark.png'
+                      : 'assets/images/fastrecovery_logo-2.png',
                   width: 125,
                   height: 38,
                   fit: BoxFit.contain,
                   alignment: Alignment.centerLeft,
                 ),
                 const SizedBox(width: 10),
-                Container(width: 1, height: 27, color: Colors.black),
+                Container(width: 1, height: 27, color: textColor),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Dashboard',
                     maxLines: 1,
@@ -772,7 +464,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                       fontSize: 17,
                       fontWeight: FontWeight.w900,
                       letterSpacing: -.2,
-                      color: Colors.black,
+                      color: textColor,
                     ),
                   ),
                 ),
@@ -799,9 +491,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     // Logo photo — pehle company photo, phir user photo.
     final companyPhotoUrl = _user?.company?.photoUrl.trim() ?? '';
     final userPhotoUrl = _user?.photoUrl.trim() ?? '';
-    final resolvedPhotoUrl =
-    companyPhotoUrl.isNotEmpty ? companyPhotoUrl : userPhotoUrl;
-    final hasNetworkPhoto = resolvedPhotoUrl.isNotEmpty;
+    final photoUrl = companyPhotoUrl.isNotEmpty ? companyPhotoUrl : userPhotoUrl;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
@@ -824,9 +514,8 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
             tween: Tween(begin: .82, end: 1),
             duration: const Duration(milliseconds: 700),
             curve: Curves.easeOutBack,
-            builder: (context, scale, child) {
-              return Transform.scale(scale: scale, child: child);
-            },
+            builder: (context, scale, child) =>
+                Transform.scale(scale: scale, child: child),
             child: Container(
               width: 96,
               height: 96,
@@ -847,34 +536,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                   shape: BoxShape.circle,
                   color: cardColor,
                 ),
-                child: ClipOval(
-                  child: _loading
-                      ? const Center(
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.blue600,
-                        ),
-                      ),
-                    ),
-                  )
-                      : hasNetworkPhoto
-                      ? Image.network(
-                    resolvedPhotoUrl.startsWith('http')
-                        ? resolvedPhotoUrl
-                        : '$_baseUrl$resolvedPhotoUrl',
-                    width: 92,
-                    height: 92,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return _logoInitials();
-                    },
-                  )
-                      : _logoInitials(),
-                ),
+                child: ClipOval(child: _buildLogo(photoUrl)),
               ),
             ),
           ),
@@ -917,10 +579,9 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
             ),
           ),
 
-          // _user login ke turant baad null ho sakta hai -> `!` nahi lagana
+          // _user login ke turant baad null ho sakta hai
           Text(
             _user?.name ?? '',
-            key: ValueKey(_user?.name),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -934,59 +595,83 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
 
           if (!_loading && _displayPhone.isNotEmpty) ...[
             const SizedBox(height: 2),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.phone_rounded,
-                  size: 14,
-                  color: AppColors.blue600,
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    _displayPhone,
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: mutedText,
-                    ),
-                  ),
-                ),
-              ],
+            _heroLine(
+              icon: Icons.phone_rounded,
+              iconColor: AppColors.blue600,
+              text: _displayPhone,
+              fontSize: 12,
+              weight: FontWeight.w600,
+              color: mutedText,
             ),
           ],
 
           if (_location.isNotEmpty) ...[
             const SizedBox(height: 7),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.location_on_rounded,
-                  size: 14,
-                  color: AppColors.gold400,
-                ),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: Text(
-                    _location,
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w500,
-                      color: mutedText,
-                    ),
-                  ),
-                ),
-              ],
+            _heroLine(
+              icon: Icons.location_on_rounded,
+              iconColor: AppColors.gold400,
+              text: _location,
+              fontSize: 11.5,
+              weight: FontWeight.w500,
+              color: mutedText,
             ),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildLogo(String photoUrl) {
+    if (_loading) {
+      return const Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.blue600),
+          ),
+        ),
+      );
+    }
+
+    if (photoUrl.isEmpty) return _logoInitials();
+
+    return Image.network(
+      photoUrl.startsWith('http') ? photoUrl : '$_baseUrl$photoUrl',
+      width: 92,
+      height: 92,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) => _logoInitials(),
+    );
+  }
+
+  Widget _heroLine({
+    required IconData icon,
+    required Color iconColor,
+    required String text,
+    required double fontSize,
+    required FontWeight weight,
+    required Color color,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 14, color: iconColor),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: weight,
+              color: color,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1010,38 +695,6 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
           ),
         ),
       ),
-    );
-  }
-
-  // =========================================================
-  // STATS — Remaining Days & Offline Records
-  // =========================================================
-
-  Widget _buildApiStats(bool isDark) {
-    return Row(
-      children: [
-        Expanded(
-          child: _infoCard(
-            isDark: isDark,
-            icon: Icons.calendar_month_rounded,
-            label: 'Remaining Days',
-            subtitle: 'Days',
-            value: _loading ? 0 : _remainingDays,
-            onTap: () {},
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _infoCard(
-            isDark: isDark,
-            icon: Icons.cloud_off_rounded,
-            label: 'Offline Records',
-            subtitle: 'Record',
-            value: _loading ? 0 : _offlineRecords,
-            onTap: () {},
-          ),
-        ),
-      ],
     );
   }
 
@@ -1086,7 +739,6 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     required String subtitle,
     required VoidCallback onTap,
     int? value,
-    bool center = false,
   }) {
     final textColor = isDark ? Colors.white : const Color(0xff0F172A);
     final muted = isDark ? const Color(0xff7F8BA4) : const Color(0xff64748B);
@@ -1101,11 +753,9 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
           padding: const EdgeInsets.all(16),
           decoration: _cardDecoration(isDark),
           child: Row(
-            mainAxisAlignment:
-            center ? MainAxisAlignment.center : MainAxisAlignment.start,
             children: [
               _iconBadge(icon),
-              SizedBox(width: center ? 10 : 11),
+              const SizedBox(width: 11),
               Flexible(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1148,61 +798,121 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     );
   }
 
-  // =========================================================
-  // ACTIONS
-  // =========================================================
-
-  Widget _buildActionsRow(bool isDark) {
+  /// Do cards ek row mein, beech mein gap.
+  Widget _cardRow(Widget left, Widget right) {
     return Row(
       children: [
-        Expanded(
-          child: _infoCard(
-            isDark: isDark,
-            icon: Icons.person_rounded,
-            label: 'My Account',
-            subtitle: 'Profile',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfileScreen()),
-              );
-            },
-          ),
-        ),
+        Expanded(child: left),
         const SizedBox(width: 12),
-        Expanded(
-          child: _infoCard(
-            isDark: isDark,
-            icon: Icons.directions_car_rounded,
-            label: 'V. Confirmed',
-            subtitle: 'Vehicles',
-            onTap: () {},
-          ),
-        ),
+        Expanded(child: right),
       ],
     );
   }
 
-  // =========================================================
-  // CONTROL PANEL
-  // =========================================================
-
-  Widget _buildControlPanel(bool isDark) {
-    return Row(
-      children: [
-        Expanded(
-          child: _infoCard(
-            isDark: isDark,
-            icon: Icons.admin_panel_settings_rounded,
-            label: 'Control Panel',
-            subtitle: 'Manage agency settings',
-            center: true,
-            onTap: () {},
-          ),
-        ),
-      ],
+  // Remaining Days & Offline Records
+  Widget _buildApiStats(bool isDark) {
+    return _cardRow(
+      _infoCard(
+        isDark: isDark,
+        icon: Icons.calendar_month_rounded,
+        label: 'Remaining Days',
+        subtitle: 'Days',
+        value: _loading ? 0 : _remainingDays,
+        onTap: () {},
+      ),
+      _infoCard(
+        isDark: isDark,
+        icon: Icons.cloud_off_rounded,
+        label: 'Offline Records',
+        subtitle: 'Record',
+        value: _loading ? 0 : _offlineRecords,
+        onTap: () {},
+      ),
     );
   }
+
+  // My Account & Confirmed Cases
+  Widget _buildActionsRow(bool isDark) {
+    // return _cardRow(
+    //   _infoCard(
+    //     isDark: isDark,
+    //     icon: Icons.person_rounded,
+    //     label: 'My Account',
+    //     subtitle: 'Profile',
+    //     onTap: () {
+    //       Navigator.push(
+    //         context,
+    //         MaterialPageRoute(builder: (_) => const ProfileScreen()),
+    //       );
+    //     },
+    //   ),
+        return _cardRow(
+      _infoCard(
+        isDark: isDark,
+        icon: Icons.person_rounded,
+        label: 'Pending Confirmation',
+        subtitle: 'Profile',
+        value: _statsLoading ? 0 : _pendingConfirmations,
+        onTap: () {},
+      ),
+      _infoCard(
+        isDark: isDark,
+        icon: Icons.directions_car_rounded,
+        label: 'Confirmed Cases',
+        subtitle: 'Vehicles',
+        value: _statsLoading ? 0 : _confirmedConfirmations,
+        onTap: () {},
+      ),
+    );
+  }
+
+  Widget _buildStatsRow(bool isDark) {
+    return _infoCard(
+      isDark: isDark,
+      icon: Icons.car_crash_rounded,
+      label: 'Total Seized',
+      subtitle: 'Vehicles',
+      value: _statsLoading ? 0 : _inventoryConfirmed,
+      onTap: () {},
+    );
+
+    // My Account — abhi hidden
+    // _infoCard(
+    //   isDark: isDark,
+    //   icon: Icons.person_rounded,
+    //   label: 'My Account',
+    //   subtitle: 'Profile',
+    //   onTap: () {
+    //     Navigator.push(
+    //       context,
+    //       MaterialPageRoute(builder: (_) => const ProfileScreen()),
+    //     );
+    //   },
+    // ),
+
+  }
+
+  // Pending Confirmation & Total Seized
+  // Widget _buildStatsRow(bool isDark) {
+  //   return _cardRow(
+  //     _infoCard(
+  //       isDark: isDark,
+  //       icon: Icons.pending_actions_rounded,
+  //       label: 'Pending Confirmation',
+  //       subtitle: 'Cases',
+  //       value: _statsLoading ? 0 : _inventoryConfirmed,
+  //       onTap: () {},
+  //      ),
+  //     // _infoCard(
+  //     //   isDark: isDark,
+  //     //   icon: Icons.car_crash_rounded,
+  //     //   label: 'Total Seized',
+  //     //   subtitle: 'Vehicles',
+  //     //   value: _statsLoading ? 0 : _inventoryConfirmed,
+  //     //   onTap: () {},
+  //     // ),
+  //   // );
+  // }
 
   // =========================================================
   // PAGE FOOTER
@@ -1210,19 +920,13 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
 
   Future<void> _launchUrl(String url) async {
     try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Could not open link'),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
+      final ok = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
       );
+      if (!ok) _showSnack('Could not open link');
+    } catch (_) {
+      _showSnack('Could not open link');
     }
   }
 
@@ -1318,7 +1022,8 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
 }
 
 // =============================================================
-// DRAWER FOOTER (Terms & Conditions, Privacy Policy, App version)
+// DRAWER FOOTER (Terms & Conditions, App version)
+// HomeScreen ke drawer mein use hota hai — hataana mat.
 // =============================================================
 
 class DrawerFooter extends StatefulWidget {
@@ -1331,7 +1036,7 @@ class DrawerFooter extends StatefulWidget {
 class _DrawerFooterState extends State<DrawerFooter> {
   static const String _termsUrl = 'https://www.fastrecovery.in/terms';
 
-  // '...' = padh raha hai, '—' = padhne me error aaya (debug console dekho)
+  // '...' = padh raha hai, '—' = padhne me error aaya
   String _version = '...';
 
   @override
@@ -1406,8 +1111,11 @@ class _DrawerFooterState extends State<DrawerFooter> {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.open_in_new_rounded,
-                    size: 16, color: AppColors.blue600),
+                Icon(
+                  Icons.open_in_new_rounded,
+                  size: 16,
+                  color: AppColors.blue600,
+                ),
                 SizedBox(width: 6),
                 Text(
                   'Terms & Conditions',
@@ -1440,7 +1148,6 @@ class _DrawerFooterState extends State<DrawerFooter> {
     );
   }
 }
-
 
 // =============================================================
 // ANIMATED NUMBER
@@ -1494,9 +1201,9 @@ class _ShimmerChip extends StatefulWidget {
   final double height;
 
   const _ShimmerChip({
+    super.key,
     required this.width,
     required this.height,
-    super.key,
   });
 
   @override
@@ -1536,62 +1243,6 @@ class _ShimmerChipState extends State<_ShimmerChip>
           decoration: BoxDecoration(
             color: base.withOpacity(.05 + (_controller.value * .07)),
             borderRadius: BorderRadius.circular(7),
-          ),
-        );
-      },
-    );
-  }
-}
-
-// =============================================================
-// SHIMMER BOX (drawer header mein)
-// =============================================================
-
-class _ShimmerBox extends StatefulWidget {
-  final double width;
-  final double height;
-  final BorderRadius? radius;
-
-  const _ShimmerBox({
-    required this.width,
-    required this.height,
-    this.radius,
-  });
-
-  @override
-  State<_ShimmerBox> createState() => _ShimmerBoxState();
-}
-
-class _ShimmerBoxState extends State<_ShimmerBox>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Container(
-          width: widget.width,
-          height: widget.height,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.10 + (_controller.value * 0.14)),
-            borderRadius: widget.radius ?? BorderRadius.circular(8),
           ),
         );
       },

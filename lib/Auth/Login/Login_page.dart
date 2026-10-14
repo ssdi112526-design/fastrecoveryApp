@@ -463,8 +463,8 @@ class _LoginScreenState extends State<LoginScreen> {
         children: [
           AppTextField(
             controller: _emailController,
-            label: 'Agency ID / Mobile',
-            hint: ' Email or mobile',
+            label: 'Agent ID / Email',
+            hint: ' Email',
             icon: Icons.person_outline_rounded,
           ),
           _errorText(_emailError),

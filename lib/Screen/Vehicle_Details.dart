@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,16 +42,19 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
   static const String _confirmationsUrl =
       'https://www.fastrecovery.in/api/confirmations';
 
-  /// WhatsApp aur SMS dono isi recipients list ko use karte hain.
-  /// SMS ke liye alag endpoint ho to yahan badal do.
+  /// WhatsApp, SMS aur Call teeno isi recipients list ko use karte hain.
   static const String _recipientsUrl =
       'https://www.fastrecovery.in/api/confirmations/whatsapp-recipients';
 
   static const String _vehicleLoadedUrl =
       'https://www.fastrecovery.in/api/repo-cases/vehicle-loaded';
 
+  /// Offline ke liye recipients cache key
+  static const String _recipientsCacheKey = 'cached_recipients_v1';
+
   static const Color _waColor = Color(0xff25D366);
   static const Color _smsColor = Color(0xffF59E0B);
+  static const Color _callColor = Color(0xff0E6BB8);
 
   final TextEditingController _loadedCtrl = TextEditingController();
   bool _loadingLoaded = false;
@@ -60,6 +65,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
     super.initState();
     _loadingLoaded = true;
     _fetchLoadedDetails();
+    _prefetchRecipients();
   }
 
   @override
@@ -110,9 +116,34 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
     return '$message\n\nLoaded Details: $loaded';
   }
 
-  // ───────────────── Recipient flow (WhatsApp + SMS) ─────────────────
+  /// Internet na ho to item ke data se local message
+  String _buildLocalMessage() {
+    final i = widget.item;
+    final lines = <String>[
+      'Vehicle Traced — ${i.vehicleNumber}',
+      '',
+      'Customer: ${i.customerName}',
+      'Vehicle No: ${i.vehicleNumber}',
+      'Chassis No: ${i.chassisNumber}',
+      'Engine No: ${i.engineNumber}',
+      'Brand: ${i.vehicleBrand}',
+      'Model: ${i.vehicleModel}',
+      'City: ${i.city}',
+      'State: ${i.state}',
+      'Status: ${i.repoStatus}',
+    ];
+    return lines.join('\n');
+  }
 
-  /// Tap -> recipients fetch -> select sheet -> send
+  // ───────────── Recipient flow (WhatsApp + SMS + Call) ─────────────
+
+  /// Popup khulte hi recipients fetch karke cache kar lo,
+  /// taaki baad mein net band ho tab bhi list mile.
+  Future<void> _prefetchRecipients() async {
+    await _fetchRecipients();
+  }
+
+  /// Tap -> recipients fetch -> select sheet -> send / call
   Future<void> _handleRecipientTap(String channel) async {
     if (_sharingChannel != null) return;
     FocusScope.of(context).unfocus();
@@ -124,21 +155,47 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
     setState(() => _sharingChannel = null);
 
     if (recipients.isEmpty) {
+      // Net band + cache bhi khali: WhatsApp phir bhi khul jaye
+      // (contact user khud chunega)
+      if (channel == 'whatsapp') {
+        await _openWhatsApp(null, _withLoaded(_buildLocalMessage()));
+        return;
+      }
       _showSnack('No recipients found', isError: true);
       return;
     }
 
-    final isSms = channel == 'sms';
+    final Color accent = channel == 'sms'
+        ? _smsColor
+        : channel == 'call'
+        ? _callColor
+        : _waColor;
+    final IconData icon = channel == 'sms'
+        ? Icons.sms_rounded
+        : channel == 'call'
+        ? Icons.call_rounded
+        : Icons.chat_rounded;
+
     final picked = await _showRecipientSheet(
       recipients,
-      accent: isSms ? _smsColor : _waColor,
-      icon: isSms ? Icons.sms_rounded : Icons.chat_rounded,
+      accent: accent,
+      icon: icon,
+      actionLabel: channel == 'call' ? 'Call' : 'Send to',
+      actionIcon: channel == 'call' ? Icons.call_rounded : Icons.send_rounded,
     );
     if (picked == null || !mounted) return;
-    await _sendToRecipient(channel, picked);
+
+    if (channel == 'call') {
+      await _callRecipient(picked);
+    } else {
+      await _sendToRecipient(channel, picked);
+    }
   }
 
+  /// API se recipients; net band/error ho to cache se.
   Future<List<_Recipient>> _fetchRecipients() async {
+    final prefs = await SharedPreferences.getInstance();
+
     try {
       final token = await _getToken();
       final response = await http.get(
@@ -148,7 +205,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
           if (token != null && token.isNotEmpty)
             'Authorization': 'Bearer $token',
         },
-      ).timeout(const Duration(seconds: 20));
+      ).timeout(const Duration(seconds: 12));
 
       final body = jsonDecode(response.body);
       if (response.statusCode >= 200 &&
@@ -156,30 +213,47 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
           body is Map &&
           body['success'] == true) {
         final raw = (body['data']?['adminRecipients'] as List?) ?? [];
-        return raw
-            .whereType<Map>()
-            .map((e) => _Recipient(
-          id: (e['id'] ?? e['_id'] ?? '').toString(),
-          name: (e['name'] ?? '').toString(),
-          phone: (e['phone'] ?? '').toString(),
-          roleLabel: (e['roleLabel'] ?? '').toString(),
-          isPrimary: e['isPrimary'] == true ||
-              e['isPrimaryAdmin'] == true ||
-              e['primary'] == true,
-        ))
-            .where((r) => r.phone.trim().isNotEmpty)
-            .toList();
+        await prefs.setString(_recipientsCacheKey, jsonEncode(raw));
+        return _parseRecipients(raw);
       }
     } catch (e) {
       debugPrint('RECIPIENTS ERROR: $e');
     }
+
+    // Offline / error -> cached list
+    try {
+      final cached = prefs.getString(_recipientsCacheKey);
+      if (cached != null) {
+        return _parseRecipients(jsonDecode(cached) as List);
+      }
+    } catch (e) {
+      debugPrint('RECIPIENTS CACHE ERROR: $e');
+    }
     return [];
+  }
+
+  List<_Recipient> _parseRecipients(List raw) {
+    return raw
+        .whereType<Map>()
+        .map((e) => _Recipient(
+      id: (e['id'] ?? e['_id'] ?? '').toString(),
+      name: (e['name'] ?? '').toString(),
+      phone: (e['phone'] ?? '').toString(),
+      roleLabel: (e['roleLabel'] ?? '').toString(),
+      isPrimary: e['isPrimaryAdmin'] == true ||
+          e['isPrimary'] == true ||
+          e['primary'] == true,
+    ))
+        .where((r) => r.phone.trim().isNotEmpty)
+        .toList();
   }
 
   Future<_Recipient?> _showRecipientSheet(
       List<_Recipient> recipients, {
         required Color accent,
         required IconData icon,
+        String actionLabel = 'Send to',
+        IconData actionIcon = Icons.send_rounded,
       }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     int? selectedIndex; // index se select karte hain (id khali ho to bhi theek)
@@ -272,11 +346,11 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                       onPressed: selected == null
                           ? null
                           : () => Navigator.pop(ctx, selected),
-                      icon: const Icon(Icons.send_rounded, size: 18),
+                      icon: Icon(actionIcon, size: 18),
                       label: Text(
                         selected == null
                             ? 'Select a recipient'
-                            : 'Send to ${selected.name}',
+                            : '$actionLabel ${selected.name}',
                         overflow: TextOverflow.ellipsis,
                       ),
                       style: ElevatedButton.styleFrom(
@@ -416,9 +490,12 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
   }
 
   /// Report generate karo + selected recipient ko WhatsApp / SMS se bhejo.
+  /// Net band ho to local message se bhi bhej deta hai.
   Future<void> _sendToRecipient(String channel, _Recipient r) async {
     if (_sharingChannel != null) return;
     setState(() => _sharingChannel = channel);
+
+    String? baseMessage;
 
     try {
       final token = await _getToken();
@@ -440,7 +517,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
           'loadedDetails': _loadedCtrl.text.trim(),
         }),
       )
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 15));
 
       if (!mounted) return;
 
@@ -461,33 +538,47 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       }
 
       final traceReport = body['traceReport'];
-      final baseMessage =
+      baseMessage =
       traceReport is Map ? (traceReport['message']?.toString() ?? '') : '';
-
-      if (baseMessage.isEmpty) {
-        _showSnack('Report generated, but message is empty', isError: true);
-        return;
-      }
-
-      final message = _withLoaded(baseMessage);
-
-      if (channel == 'sms') {
-        await _openSms(r, message);
-      } else {
-        await _openWhatsApp(r, message);
-      }
+    } on SocketException catch (_) {
+      baseMessage = null; // internet band
+    } on TimeoutException catch (_) {
+      baseMessage = null; // net bahut slow / band
+    } on http.ClientException catch (_) {
+      baseMessage = null;
     } catch (e) {
       debugPrint('SHARE $channel ERROR: $e');
       if (!mounted) return;
       _showSnack('Something went wrong. Please try again.', isError: true);
+      return;
     } finally {
       if (mounted) setState(() => _sharingChannel = null);
     }
+
+    if (!mounted) return;
+
+    final bool offline = baseMessage == null || baseMessage.isEmpty;
+    final String message =
+    _withLoaded(offline ? _buildLocalMessage() : baseMessage);
+
+    if (offline) {
+      _showSnack('Internet off hai, offline message bheja ja raha hai',
+          isError: false);
+    }
+
+    if (channel == 'sms') {
+      await _openSms(r, message);
+    } else {
+      await _openWhatsApp(r, message);
+    }
   }
 
-  Future<void> _openWhatsApp(_Recipient r, String message) async {
+  /// recipient null ho to number ke bina WhatsApp khulta hai
+  /// (user khud contact chun leta hai).
+  Future<void> _openWhatsApp(_Recipient? r, String message) async {
+    final phone = r == null ? '' : _waPhone(r.phone);
     final uri = Uri.parse(
-      'https://wa.me/${_waPhone(r.phone)}?text=${Uri.encodeComponent(message)}',
+      'https://wa.me/$phone?text=${Uri.encodeComponent(message)}',
     );
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok) _showSnack('Could not open WhatsApp', isError: true);
@@ -504,6 +595,12 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
 
     final ok = await launchUrl(uri);
     if (!ok) _showSnack('Could not open messaging app', isError: true);
+  }
+
+  Future<void> _callRecipient(_Recipient r) async {
+    final uri = Uri(scheme: 'tel', path: '+${_waPhone(r.phone)}');
+    final ok = await launchUrl(uri);
+    if (!ok) _showSnack('Could not open dialer', isError: true);
   }
 
   // ───────────────────────── Helpers ─────────────────────────
@@ -601,6 +698,12 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
 
       final message = _withLoaded(traceReport['message']?.toString() ?? '');
       await _openEmail(message: message);
+    } on SocketException catch (_) {
+      if (!mounted) return;
+      _showSnack('Internet required to send email', isError: true);
+    } on TimeoutException catch (_) {
+      if (!mounted) return;
+      _showSnack('Internet required to send email', isError: true);
     } catch (e) {
       debugPrint('SHARE EMAIL ERROR: $e');
       if (!mounted) return;
@@ -681,20 +784,22 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                   const SizedBox(height: 10),
                   _detailGrid([
                     (
-                    Icons.directions_car_outlined, 'Vehicle Number', item.vehicleNumber
+                    Icons.directions_car_outlined,
+                    'Vehicle Number',
+                    item.vehicleNumber
                     ),
                     (
-                    Icons.confirmation_number_outlined, 'Chassis Number', item.chassisNumber
+                    Icons.confirmation_number_outlined,
+                    'Chassis Number',
+                    item.chassisNumber
                     ),
                     (
-                    Icons.settings_outlined, 'Engine Number', item.engineNumber
+                    Icons.settings_outlined,
+                    'Engine Number',
+                    item.engineNumber
                     ),
-                    (
-                    Icons.category_outlined, 'Brand', item.vehicleBrand
-                    ),
-                    (
-                    Icons.car_repair_outlined, 'Model', item.vehicleModel
-                    ),
+                    (Icons.category_outlined, 'Brand', item.vehicleBrand),
+                    (Icons.car_repair_outlined, 'Model', item.vehicleModel),
                   ]),
                   const SizedBox(height: 18),
                   _popupSection('Loaded Details', Icons.edit_note_rounded),
@@ -704,9 +809,6 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                   _popupSection('Status', Icons.info_outline),
                   const SizedBox(height: 10),
                   _detailGrid([
-                    (
-                    Icons.flag_outlined, 'Confirmation Status', item.confirmationStatus
-                    ),
                     (Icons.info_outline, 'Status', item.repoStatus),
                   ]),
                   const SizedBox(height: 16),
@@ -866,7 +968,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
               onTap: () => _handleRecipientTap('whatsapp'),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: _actionButton(
               channel: 'email',
@@ -876,7 +978,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
               onTap: _shareEmail,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: _actionButton(
               channel: 'sms',
@@ -884,6 +986,16 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
               icon: Icons.sms_rounded,
               color: _smsColor,
               onTap: () => _handleRecipientTap('sms'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _actionButton(
+              channel: 'call',
+              label: 'Call',
+              icon: Icons.call_rounded,
+              color: _callColor,
+              onTap: () => _handleRecipientTap('call'),
             ),
           ),
         ],

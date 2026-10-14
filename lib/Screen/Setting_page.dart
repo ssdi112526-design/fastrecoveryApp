@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 // ── Apne project ke hisaab se in 3 imports ka path check karo ───────────────
 import '../Service/Location_tracking_permission.dart';
@@ -16,6 +20,9 @@ abstract final class _Links {
   static const terms = 'https://www.fastrecovery.in/terms';
   static const supportEmail = 'support@fastrecovery.in';
   static const appName = 'FastRecovery';
+
+  static const removeUser = 'https://www.fastrecovery.in/api/repo-users/remove';
+  static const testAgentId = '4'; // TODO: login ke baad real agentId yahan se hatao
 }
 
 
@@ -59,6 +66,61 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   PackageInfo? _info;
+  bool _deleting = false;
+
+  /// Success par null, fail par user ko dikhane wala message.
+  Future<String?> _removeAccountApi() async {
+    final prefs = await SharedPreferences.getInstance();
+    final agentId = (prefs.getString('userId') ?? '').trim();
+    final token = prefs.getString('token') ?? '';
+
+    debugPrint('🗑️ [DELETE ACCOUNT] agentId  : "$agentId"');
+    debugPrint('🗑️ [DELETE ACCOUNT] hasToken : ${token.isNotEmpty}');
+
+    if (agentId.isEmpty) {
+      debugPrint('🗑️ [DELETE ACCOUNT] agentId missing in prefs (key: userId)');
+      return 'Account details not found. Please login again.';
+    }
+
+    final url = Uri.parse(_Links.removeUser);
+    final body = jsonEncode({'agentId': agentId});
+
+    debugPrint('🗑️ [DELETE ACCOUNT] URL     : $url');
+    debugPrint('🗑️ [DELETE ACCOUNT] Payload : $body');
+
+    try {
+      final res = await http
+          .post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+        body: body,
+      )
+          .timeout(const Duration(seconds: 20));
+
+      debugPrint('🗑️ [DELETE ACCOUNT] Status  : ${res.statusCode}');
+      debugPrint('🗑️ [DELETE ACCOUNT] Response: ${res.body}');
+
+      dynamic json;
+      try {
+        json = jsonDecode(res.body);
+      } catch (_) {}
+
+      final serverMsg = json is Map ? json['message']?.toString() : null;
+      final is2xx = res.statusCode >= 200 && res.statusCode < 300;
+
+      if (is2xx && json is Map && json['success'] == true) return null;
+
+      return serverMsg ?? 'Could not delete account (${res.statusCode})';
+    } catch (e, st) {
+      debugPrint('🗑️ [DELETE ACCOUNT] ERROR   : $e');
+      debugPrint('$st');
+      return 'Network error. Please check your internet and try again.';
+    }
+  }
 
   @override
   void initState() {
@@ -173,15 +235,31 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     if (!ok || !mounted) return;
 
-    final onDelete = widget.onDeleteAccount;
-    if (onDelete == null) {
-      await _emailSupport('Account deletion request');
-      return;
-    }
+    setState(() => _deleting = true);
     try {
-      await onDelete();
+      final onDelete = widget.onDeleteAccount;
+
+      // Agar parent ne custom callback diya hai to wahi chalega
+      if (onDelete != null) {
+        await onDelete();
+        return;
+      }
+
+      // Default: direct API call (real agentId prefs se aata hai)
+      final error = await _removeAccountApi();
+      if (!mounted) return;
+
+      if (error == null) {
+        _snack('Account deleted successfully');
+        await widget.onLogout(); // token clear + login screen
+      } else {
+        _snack(error); // server ka message ya network error
+      }
     } catch (e) {
-      _snack('Could not delete account. Please try again.');
+      debugPrint('🗑️ [DELETE ACCOUNT] Exception: $e');
+      if (mounted) _snack('Could not delete account. Please try again.');
+    } finally {
+      if (mounted) setState(() => _deleting = false);
     }
   }
 
@@ -325,8 +403,8 @@ class _SettingsPageState extends State<SettingsPage> {
               icon: Icons.delete_outline_rounded,
               color: Colors.redAccent,
               title: 'Delete account',
-              subtitle: 'Permanently remove your account',
-              onTap: _confirmDeleteAccount,
+              subtitle: _deleting ? 'Deleting...' : 'Permanently remove your account',
+              onTap: _deleting ? null : _confirmDeleteAccount,
             ),
 
             const SizedBox(height: 18),

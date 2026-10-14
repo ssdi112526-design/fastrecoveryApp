@@ -1,14 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
-
+import 'package:fastrecovery/Screen/Setting_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
+import '../Auth/Login/Login_page.dart';
 import '../Model_class/Proffile_model.dart';
 import '../Model_class/vehcial_detail_model.dart';
+import '../Service/Location_tracking_permission.dart';
+import '../Service/Offline_sync_service.dart';
+import '../Widget/Offline_sync_card.dart';
+import '../db_helper/Offline_DB_helper.dart';
 import '../theme/app_theme.dart';
+import 'Dashboard.dart';
+import 'ID_card.dart';
+import 'Profile_page.dart';
+import 'Total_Seized.dart';
 import 'Vehicle_Details.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -25,6 +33,13 @@ class _HomeScreenState extends State<HomeScreen> {
   static const String _baseUrl = 'https://www.fastrecovery.in';
   static const String _searchUrl = '$_baseUrl/api/repo-cases';
   static const String _profileUrl = '$_baseUrl/api/auth/profile';
+  static const String _loginUrl = '$_baseUrl/api/auth/login';
+// static const String _loginUrl = '$_baseUrl/api/auth/login';   // ← hata do
+  static const String _verifyPanelUrl =
+      '$_baseUrl/api/repo-admin/verify-agent-panel';
+
+  // Dashboard ek baar unlock hone ke baad true. Logout par prefs.clear() isse hata deta hai.
+  static const String _kDashboardUnlocked = 'dashboard_unlocked';
 
   static const String _typeVehicle = 'vehicleNumber';
   static const String _typeChassis = 'chassisNumber';
@@ -46,6 +61,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // User / company
   String _userName = 'User';
+  String _userPhone = '';
+  String _userId = '';
+  String _userEmail = '';
   String _companyName = 'Company';
   String _companyCode = '';
   bool _userDataLoading = true;
@@ -180,6 +198,28 @@ class _HomeScreenState extends State<HomeScreen> {
       );
   }
 
+  Future<void> _logout(BuildContext context) async {
+    await LocationTrackingService.instance.stop();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); // saara saved data clear (token, role, name, unlock flag, etc.)
+    await OfflineSyncService.instance.reset(); // DB + cursor saaf
+
+    if (!context.mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+    );
+  }
+
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SettingsPage(onLogout: () => _logout(context)),
+      ),
+    );
+  }
+
   void _handleUnauthorized() {
     if (!mounted) return;
     setState(() {
@@ -190,8 +230,99 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
+  // DASHBOARD LOCK (password ek baar)
+  // ============================================================
+
+  /// Dashboard kholo. Pehli baar login password maango, uske baad seedha khulega.
+  Future<void> _openDashboard() async {
+    final prefs = await SharedPreferences.getInstance();
+    var unlocked = prefs.getBool(_kDashboardUnlocked) ?? false;
+
+    if (!unlocked) {
+      if (!mounted) return;
+      unlocked = await _askDashboardPassword();
+      if (unlocked) await prefs.setBool(_kDashboardUnlocked, true);
+    }
+
+    if (!unlocked || !mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AgencyDashboardPage()),
+    );
+  }
+
+  Future<bool> _askDashboardPassword() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DashboardPasswordDialog(onVerify: _verifyPassword),
+    );
+    return ok == true;
+  }
+
+  /// Login API se password check karta hai (response ka token use nahi karte).
+  /// Agent panel unlock API se password verify karta hai.
+  Future<_VerifyResult> _verifyPassword(String password) async {
+    try {
+      final headers = await _buildHeaders(); // Bearer token ke saath
+
+      final res = await http
+          .post(
+        Uri.parse(_verifyPanelUrl),
+        headers: headers,
+        body: jsonEncode({'password': password}),
+      )
+          .timeout(const Duration(seconds: 15));
+
+      debugPrint('VERIFY PANEL -> ${res.statusCode} | ${res.body}');
+
+      dynamic body;
+      try {
+        body = jsonDecode(res.body);
+      } catch (_) {}
+
+      final serverMsg =
+      body is Map ? (body['message'] ?? body['error'])?.toString() : null;
+      final is2xx = res.statusCode >= 200 && res.statusCode < 300;
+
+      if (is2xx && body is Map && body['success'] == true) {
+        return const _VerifyResult.ok();
+      }
+
+      if (res.statusCode == 401) {
+        // 401 = ya to token expire ya password galat; message server se aayega
+        return _VerifyResult.fail(serverMsg ?? 'Incorrect password');
+      }
+      if (res.statusCode == 403) {
+        return _VerifyResult.fail(serverMsg ?? 'Incorrect password');
+      }
+      return _VerifyResult.fail(
+        serverMsg ?? 'Verification failed (${res.statusCode})',
+      );
+    } on TimeoutException {
+      return const _VerifyResult.fail('Request timed out. Please try again.');
+    }
+    // baaki network errors dialog ka catch handle kar leta hai
+  }
+
+  // ============================================================
   // USER / COMPANY
   // ============================================================
+
+  /// Profile response se raw user map nikalta hai (model ke field names par depend nahi).
+  Map<String, dynamic> _rawUserMap(dynamic decoded) {
+    if (decoded is! Map) return {};
+    final data = decoded['data'];
+    final candidates = [
+      decoded['user'],
+      if (data is Map) data['user'],
+      data,
+    ];
+    for (final c in candidates) {
+      if (c is Map) return Map<String, dynamic>.from(c);
+    }
+    return {};
+  }
+
   Future<void> _loadUserData() async {
     if (!mounted) return;
     setState(() => _userDataLoading = true);
@@ -231,18 +362,30 @@ class _HomeScreenState extends State<HomeScreen> {
           : 'User';
       final companyName = _extractCompanyName(user);
       final companyCode = user?.company?.companyCode.trim() ?? '';
+      final phone = user?.phone.trim() ?? '';
+
+      final rawUser = _rawUserMap(decoded);
+      final userId =
+          '${rawUser['id'] ?? rawUser['_id'] ?? rawUser['userId'] ?? ''}';
+      final email = '${rawUser['email'] ?? ''}'.trim();
 
       if (!mounted) return;
       setState(() {
         _userName = name;
         _companyName = companyName;
         _companyCode = companyCode;
+        _userPhone = phone;
+        _userId = userId;
+        _userEmail = email;
         _userDataLoading = false;
       });
 
       await prefs.setString('userName', name);
       await prefs.setString('companyName', companyName);
       await prefs.setString('companyCode', companyCode);
+      await prefs.setString('userPhone', phone);
+      await prefs.setString('userId', userId);
+      await prefs.setString('userEmail', email);
     } catch (e) {
       debugPrint('LOAD USER DATA — falling back to cache: $e');
       if (!mounted) return;
@@ -256,6 +399,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _userName = cached('userName', 'User');
         _companyName = cached('companyName', 'Your Agency');
         _companyCode = prefs.getString('companyCode') ?? '';
+        _userPhone = prefs.getString('userPhone') ?? '';
+        _userId = prefs.getString('userId') ?? '';
+        _userEmail = prefs.getString('userEmail') ?? '';
         _userDataLoading = false;
       });
     }
@@ -342,6 +488,8 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       _statsLoading = false;
     });
+
+    OfflineSyncService.instance.totalEstimate = _companyTotalRecords;
   }
 
   // ============================================================
@@ -457,6 +605,11 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
+      final sync = OfflineSyncService.instance;
+      if (sync.useOffline) {
+        await _searchOffline(type, value);
+        return;
+      }
       final response = await _fetchPage(type, value, 1);
       debugPrint('STATUS: ${response.statusCode}');
 
@@ -505,6 +658,43 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e, stack) {
       debugPrint('SEARCH ERROR: $e\n$stack');
       _showMessage('Unable to search $label right now');
+
+    } finally {
+      if (mounted) setState(() => _isSearching = false);
+    }
+  }
+
+  Future<void> _searchOffline(String type, String value) async {
+    final isVehicle = type == _typeVehicle;
+    final label = isVehicle ? 'vehicle' : 'chassis';
+    final sync = OfflineSyncService.instance;
+
+    try {
+      final results = await OfflineDb.instance
+          .search(isVehicle: isVehicle, digits: value);
+      if (!mounted) return;
+
+      setState(() {
+        _searchResults = results;
+        _hasMore = false; // local mein pagination nahi
+      });
+
+      if (results.isEmpty) {
+        final masked = '*' * (isVehicle ? _vehicleDigits : _chassisDigits);
+        _showMessage(
+          sync.hasData
+              ? 'No $label records found for $masked$value (offline)'
+              : 'Offline data not downloaded yet. Connect to internet and sync once.',
+        );
+      }
+      if (isVehicle) {
+        _silentlyClear(_vehicleController, _onVehicleChanged);
+      } else {
+        _silentlyClear(_chassisController, _onChassisChanged);
+      }
+    } catch (e) {
+      debugPrint('OFFLINE SEARCH ERROR: $e');
+      _showMessage('Unable to search offline data');
     } finally {
       if (mounted) setState(() => _isSearching = false);
     }
@@ -588,6 +778,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xff0B1220) : AppColors.paper,
+      drawer: _buildDrawer(),
       body: SingleChildScrollView(
         controller: _scrollController,
         padding: const EdgeInsets.only(bottom: 100),
@@ -602,14 +793,251 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: _buildFindCard(),
               ),
             ),
+            // OfflineBanner(),
             Transform.translate(
               offset: const Offset(0, -10),
               child: _isSearching
                   ? _buildSkeletonGrid()
                   : _hasSearched
                   ? _buildSearchResults()
-                  : _buildStatsCards(),
+                  : Column(
+                children: [
+                  const SizedBox(height: 12),
+                  const OfflineSyncCard(),
+                  _buildStatsCards(),
+                ],
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // DRAWER
+  // ============================================================
+
+  Widget _buildDrawer() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final background =
+    isDark ? const Color(0xff0A1220) : const Color(0xffF8FAFC);
+    final primaryText = isDark ? Colors.white : const Color(0xff0F172A);
+    final secondaryText =
+    isDark ? const Color(0xff8F9DB5) : const Color(0xff64748B);
+
+    // Find Vehicle yahi screen hai, isliye menu mein nahi.
+    final drawerItems = [
+      (icon: Icons.dashboard_rounded, title: 'Dashboard'),
+      (icon: Icons.badge_rounded, title: 'ID Card'),
+      (icon: Icons.person_rounded, title: 'Profile'),
+      (icon: Icons.car_crash_rounded, title: 'Total Seized Vehicle'),
+      (icon: Icons.settings_rounded, title: 'Setting'),
+    ];
+
+    return Drawer(
+      width: 292,
+      backgroundColor: background,
+      elevation: 20,
+      child: SafeArea(
+        child: Column(
+          children: [
+            // ── HEADER ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+              child: Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark
+                        ? [const Color(0xff13294B), const Color(0xff0E1A31)]
+                        : [const Color(0xffEEF5FF), Colors.white],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withOpacity(.08)
+                        : const Color(0xffDDE7F3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: AppColors.blueGradient,
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.blue600.withOpacity(.25),
+                            blurRadius: 14,
+                            offset: const Offset(0, 7),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.business_center_rounded,
+                        color: Colors.white,
+                        size: 23,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _userDataLoading
+                          ? const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _ShimmerBox(width: 130, height: 13),
+                          SizedBox(height: 7),
+                          _ShimmerBox(width: 80, height: 10),
+                        ],
+                      )
+                          : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _companyName.isNotEmpty
+                                ? _companyName
+                                : 'Your Agency',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w900,
+                              color: primaryText,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Agency Workspace',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: secondaryText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── MENU TITLE ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 4, 22, 9),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'MAIN MENU',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.1,
+                    color: secondaryText,
+                  ),
+                ),
+              ),
+            ),
+
+            // ── MENU ITEMS ──
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: drawerItems.length,
+                itemBuilder: (itemContext, index) {
+                  final item = drawerItems[index];
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(15),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(15),
+                        onTap: () {
+                          Navigator.of(itemContext).pop(); // drawer band
+
+                          switch (item.title) {
+                            case 'Dashboard':
+                              _openDashboard(); // pehli baar password, phir seedha
+                              break;
+                            case 'ID Card':
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const IdCardPage(),
+                                ),
+                              );
+                              break;
+                            case 'Profile':
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ProfileScreen(),
+                                ),
+                              );
+                              break;
+                            case 'Total Seized Vehicle':
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => SeizedSuccessfullyScreen(),
+                                ),
+                              );
+                              break;
+                            case 'Setting':
+                              _openSettings();
+                              break;
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 13,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.white.withOpacity(.045)
+                                      : const Color(0xffF1F5F9),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  item.icon,
+                                  size: 20,
+                                  color: secondaryText,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  item.title,
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: secondaryText,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // ── BOTTOM: Terms & Conditions, App version ──
+            const DrawerFooter(),
           ],
         ),
       ),
@@ -639,19 +1067,21 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             children: [
-              GestureDetector(
-                onTap: () => Navigator.of(context).maybePop(),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(.14),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.arrow_back_rounded,
-                    size: 22,
-                    color: Colors.white,
+              Builder(
+                builder: (menuContext) => GestureDetector(
+                  onTap: () => Scaffold.of(menuContext).openDrawer(),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(.14),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.menu_rounded,
+                      size: 22,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
@@ -667,11 +1097,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       fontSize: 12,
                     ),
                     children: [
-                      const TextSpan(text: 'Welcome, '),
+                      const TextSpan(text: 'Welcome,\n'),
                       TextSpan(
                         text: _companyName,
                         style: const TextStyle(
                           color: Colors.white,
+                          fontSize: 16,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -684,24 +1115,26 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: 60,
                   height: 24,
                   radius: BorderRadius.all(Radius.circular(9)),
-                )
-              else if (_companyCode.isNotEmpty)
-                Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(.15),
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Text(
-                    _companyCode,
-                    style: AppTextStyles.mono(
-                      size: 11,
-                      weight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
                 ),
+              const SizedBox(width: 8),
+              const OfflineModeToggle(),
+              // else if (_companyCode.isNotEmpty)
+              //   Container(
+              //     padding:
+              //     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              //     decoration: BoxDecoration(
+              //       color: Colors.white.withOpacity(.15),
+              //       borderRadius: BorderRadius.circular(9),
+              //     ),
+              //     child: Text(
+              //       _companyCode,
+              //       style: AppTextStyles.mono(
+              //         size: 11,
+              //         weight: FontWeight.w700,
+              //         color: Colors.white,
+              //       ),
+              //     ),
+              //   ),
             ],
           ),
           const SizedBox(height: 22),
@@ -766,7 +1199,6 @@ class _HomeScreenState extends State<HomeScreen> {
   // ============================================================
   Widget _buildFindCard() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1387,6 +1819,288 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // ============================================================
+// DASHBOARD PASSWORD DIALOG
+// ============================================================
+class _VerifyResult {
+  final bool ok;
+  final String? message;
+
+  const _VerifyResult.ok()
+      : ok = true,
+        message = null;
+
+  const _VerifyResult.fail(this.message) : ok = false;
+}
+
+class _DashboardPasswordDialog extends StatefulWidget {
+  final Future<_VerifyResult> Function(String password) onVerify;
+
+  const _DashboardPasswordDialog({required this.onVerify});
+
+  @override
+  State<_DashboardPasswordDialog> createState() =>
+      _DashboardPasswordDialogState();
+}
+
+class _DashboardPasswordDialogState extends State<_DashboardPasswordDialog> {
+  final _controller = TextEditingController();
+  bool _obscure = true;
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final password = _controller.text;
+    if (password.isEmpty) {
+      setState(() => _error = 'Please enter your password');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final result = await widget.onVerify(password);
+      if (!mounted) return;
+      if (result.ok) {
+        Navigator.pop(context, true);
+      } else {
+        setState(() {
+          _loading = false;
+          _error = result.message ?? 'Incorrect password';
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Could not verify. Check your internet and try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xff111827) : Colors.white;
+    final titleColor = isDark ? Colors.white : const Color(0xff0F172A);
+    final mutedColor =
+    isDark ? const Color(0xff8A97B0) : const Color(0xff64748B);
+    final fieldBg = isDark ? const Color(0xff0F172A) : const Color(0xffF8FAFC);
+    final fieldBorder =
+    isDark ? const Color(0xff334155) : const Color(0xffE2E8F0);
+
+    OutlineInputBorder border(Color c, [double w = 1.2]) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: c, width: w),
+    );
+
+    return Dialog(
+      backgroundColor: bg,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(22, 26, 22, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Lock icon
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: AppColors.blueGradient,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.blue600.withOpacity(.28),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.lock_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Dashboard Locked',
+              style: TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.w800,
+                color: titleColor,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Enter your login password to continue.\nYou will be asked only once.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12.5, height: 1.4, color: mutedColor),
+            ),
+            const SizedBox(height: 20),
+
+            // Password field
+            TextField(
+              controller: _controller,
+              obscureText: _obscure,
+              autofocus: true,
+              enabled: !_loading,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
+              onChanged: (_) {
+                if (_error != null) setState(() => _error = null);
+              },
+              style: TextStyle(
+                color: titleColor,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Password',
+                hintStyle: TextStyle(color: mutedColor, fontSize: 14),
+                filled: true,
+                fillColor: fieldBg,
+                contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                prefixIcon: Icon(Icons.lock_outline_rounded, color: mutedColor),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscure
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded,
+                    color: mutedColor,
+                    size: 20,
+                  ),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                ),
+                border: border(fieldBorder),
+                enabledBorder: border(fieldBorder),
+                disabledBorder: border(fieldBorder),
+                focusedBorder: border(AppColors.blue600, 1.6),
+              ),
+            ),
+
+            // Error
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withOpacity(.10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.redAccent.withOpacity(.30)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: Colors.redAccent,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 22),
+
+            // Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 50,
+                    child: OutlinedButton(
+                      onPressed:
+                      _loading ? null : () => Navigator.pop(context, false),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: mutedColor,
+                        side: BorderSide(color: fieldBorder),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: Opacity(
+                    opacity: _loading ? .7 : 1,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Ink(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          gradient: AppColors.blueGradient,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: _loading ? null : _submit,
+                          child: Center(
+                            child: _loading
+                                ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                                : const Text(
+                              'Unlock',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
 // SKELETON CARD
 // ============================================================
 class _SkeletonResultCard extends StatefulWidget {
@@ -1407,6 +2121,11 @@ class _SkeletonResultCardState extends State<_SkeletonResultCard>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat();
+    final sync = OfflineSyncService.instance;
+    sync.init().then((_) {
+      // Online hai aur sync pura nahi hua / update chahiye -> auto start
+      if (sync.isOnline) sync.start();
+    });
   }
 
   @override
