@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../../Widget/Common_widget.dart';
 import '../../theme/app_theme.dart';
@@ -47,6 +48,7 @@ class _SignupScreenState extends State<SignupScreen> {
   String? _adminDistrictError;
   String? _adminPincodeError;
   String? _adminPostError;
+  String? _agreeError;
 
   static const String _registerUrl =
       'https://www.fastrecovery.in/api/companies/register';
@@ -193,6 +195,9 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Future<void> _registerCompany() async {
+
+    if (_isLoading) return; // double tap se bachne ke liye
+
     if (!_validateFields()) {
       _showMessage('Please fix the highlighted fields');
       return;
@@ -202,6 +207,24 @@ class _SignupScreenState extends State<SignupScreen> {
       _showMessage('Please agree to Terms & Privacy Policy');
       return;
     }
+
+    final fieldsValid = _validateFields();
+
+    setState(() {
+      _agreeError =
+      _agree ? null : 'Please accept Terms & Privacy Policy to continue';
+    });
+
+    if (!fieldsValid) {
+      _showMessage('Please fix the highlighted fields');
+      return;
+    }
+
+    if (!_agree) {
+      _showMessage('Please agree to Terms & Privacy Policy');
+      return;
+    }
+
 
     setState(() => _isLoading = true);
 
@@ -237,7 +260,7 @@ class _SignupScreenState extends State<SignupScreen> {
           if (mounted) {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => const OtpScreen(fromSignup: true),
+                builder: (_) => const OtpScreen(fromSignup: true,),
               ),
             );
           }
@@ -409,7 +432,13 @@ class _SignupScreenState extends State<SignupScreen> {
                       hint: '10-digit mobile number',
                       icon: Icons.phone_iphone_rounded,
                       keyboardType: TextInputType.phone,
+                      maxLength: 10,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(10),
+                      ],
                     ),
+
                     _errorText(_phoneError),
                     const SizedBox(height: 16),
                     AppTextField(
@@ -506,40 +535,65 @@ class _SignupScreenState extends State<SignupScreen> {
                           height: 20,
                           child: Checkbox(
                             value: _agree,
-                            onChanged: (v) => setState(() => _agree = v ?? false),
+                            onChanged: (v) => setState(() {
+                              _agree = v ?? false;
+                              if (_agree) _agreeError = null; // tick karte hi error hat jaye
+                            }),
                             activeColor: AppColors.blue600,
+                            side: BorderSide(
+                              color: _agreeError != null
+                                  ? Colors.redAccent
+                                  : AppColors.slate400,
+                              width: 1.5,
+                            ),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(4)),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.only(top: 2),
-                            child: RichText(
-                              text: TextSpan(
-                                style: AppTextStyles.body(
-                                    size: 13, color: AppColors.slate600),
-                                children: [
-                                  const TextSpan(text: 'I agree to the '),
-                                  TextSpan(
-                                    text: 'Terms & Privacy Policy',
-                                    style: TextStyle(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => setState(() {
+                                _agree = !_agree;
+                                if (_agree) _agreeError = null;
+                              }),
+                              child: RichText(
+                                text: TextSpan(
+                                  style: AppTextStyles.body(size: 13, color: AppColors.slate600),
+                                  children: [
+                                    const TextSpan(text: 'I agree to the '),
+                                    TextSpan(
+                                      text: 'Terms & Privacy Policy',
+                                      style: TextStyle(
                                         color: AppColors.blue600,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                ],
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ],
                     ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 28),
+                      child: _errorText(_agreeError),
+                    ),
+
                     const SizedBox(height: 18),
-                    PrimaryButton(
-                      label: _isLoading ? 'Please wait...' : 'Create Account',
-                      icon: null,
-                      onTap: _isLoading ? () {} : _registerCompany,
+                    Opacity(
+                      opacity: _agree ? 1 : .55,
+                      child: PrimaryButton(
+                        label: _isLoading ? 'Please wait...' : 'Create Account',
+                        icon: null,
+                        onTap: _isLoading ? () {} : _registerCompany,
+                      ),
                     ),
                     const SizedBox(height: 20),
                     Center(

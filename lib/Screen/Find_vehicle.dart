@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:fastrecovery/Screen/Setting_page.dart';
+import 'package:fastrecovery/Screen/Setting_page/Setting_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -828,11 +828,12 @@ class _HomeScreenState extends State<HomeScreen> {
     isDark ? const Color(0xff8F9DB5) : const Color(0xff64748B);
 
     // Find Vehicle yahi screen hai, isliye menu mein nahi.
+
     final drawerItems = [
       (icon: Icons.dashboard_rounded, title: 'Dashboard'),
       (icon: Icons.badge_rounded, title: 'ID Card'),
       (icon: Icons.person_rounded, title: 'Profile'),
-      (icon: Icons.car_crash_rounded, title: 'Total Seized Vehicle'),
+      // (icon: Icons.car_crash_rounded, title: 'Total Seized Vehicle'),
       (icon: Icons.settings_rounded, title: 'Setting'),
     ];
 
@@ -1279,6 +1280,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   controller: _chassisController,
                   focusNode: _chassisFocus,
                   maxLength: _chassisDigits,
+                  alphanumeric: true, // ← NEW
                 ),
               ),
             ],
@@ -1328,6 +1330,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required TextEditingController controller,
     required FocusNode focusNode,
     required int maxLength,
+    bool alphanumeric = false, // ← NEW
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -1372,8 +1375,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   controller: controller,
                   focusNode: focusNode,
                   maxLength: maxLength,
-                  keyboardType: TextInputType.number,
+                  keyboardType: alphanumeric ? TextInputType.visiblePassword : TextInputType.number,
                   inputFormatters: [
+                    if (alphanumeric)
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]'))
+                    else
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(maxLength),
                   ],

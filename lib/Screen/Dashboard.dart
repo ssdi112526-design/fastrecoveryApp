@@ -1,15 +1,21 @@
 import 'dart:convert';
-
+import 'package:fastrecovery/Screen/Confimation_cases/Update_inverntory.dart' hide ConfirmedCases;
+import 'package:fastrecovery/Service/SharedPreferenceService.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-
 import '../../Model_class/Proffile_model.dart';
 import '../../theme/app_theme.dart';
 import '../Service/Location_tracking_permission.dart';
-import 'Profile_page.dart';
+import 'Confimation_cases/ConfirmedCases.dart';
+import 'Pending_confirmed.dart';
+import 'Total_Seized.dart';
+
+// =============================================================
+// AGENCY DASHBOARD
+// =============================================================
 
 class AgencyDashboardPage extends StatefulWidget {
   const AgencyDashboardPage({super.key});
@@ -22,7 +28,6 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     with SingleTickerProviderStateMixin {
   static const String _baseUrl = 'https://www.fastrecovery.in';
   static const String _kProfileCache = 'dashboard_profile_cache';
-  static const String _kDashboardUnlocked = 'dashboard_unlocked';
 
   // ── Loading flags ──
   bool _loading = true; // profile
@@ -40,6 +45,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
 
   // ── API stats ──
   int _pendingConfirmations = 0;
+  int _companyTotalRecords =0;
   int _inventoryConfirmed = 0;
   int _confirmedConfirmations = 0;
 
@@ -116,6 +122,12 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
         ),
       ),
     );
+  }
+
+  /// Screen kholo. [refreshOnReturn] true ho to wapas aane par counts reload.
+  Future<void> _goTo(Widget page, {bool refreshOnReturn = false}) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    if (refreshOnReturn && mounted) _loadDashboardData();
   }
 
   // =========================================================
@@ -259,17 +271,18 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     }
     return null;
   }
-
   Future<void> _loadStats(Map<String, String> headers) async {
     final results = await Future.wait([
       _fetchStat('/api/confirmations/stats/pending-count', headers),
       _fetchStat('/api/confirmations/stats/inventory-confirmed-count', headers),
       _fetchStat('/api/confirmations/stats/count', headers),
+      _fetchStat('/api/repo-cases/stats/linked-upload-agencies', headers),
     ]);
 
     final pending = results[0];
     final inventory = results[1];
     final count = results[2];
+    final records = results[3];
 
     if (!mounted) return;
     setState(() {
@@ -287,6 +300,9 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
               count['confirmedCount'] ??
               count['CONFIRMED'],
         );
+      }
+      if (records != null) {
+        _companyTotalRecords = _toInt(records['companyTotalRecords']);
       }
       _statsLoading = false;
     });
@@ -308,18 +324,14 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   List<String> _extractPhones(UserModel? user) {
     final phones = <String>[];
 
-    final userPhone = user?.phone.trim() ?? '';
-    if (userPhone.isNotEmpty) phones.add(userPhone);
-
-    final secondNumber = user?.secondAgencyNumber.trim() ?? '';
-    if (secondNumber.isNotEmpty && !phones.contains(secondNumber)) {
-      phones.add(secondNumber);
+    void add(String? value) {
+      final v = value?.trim() ?? '';
+      if (v.isNotEmpty && !phones.contains(v)) phones.add(v);
     }
 
-    final companyPhone = user?.company?.phone.trim() ?? '';
-    if (companyPhone.isNotEmpty && !phones.contains(companyPhone)) {
-      phones.add(companyPhone);
-    }
+    add(user?.phone);
+    add(user?.secondAgencyNumber);
+    add(user?.company?.phone);
 
     return phones;
   }
@@ -365,11 +377,11 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                     const SizedBox(height: 34),
                     _buildHero(isDark),
                     const SizedBox(height: 26),
-                    _buildApiStats(isDark),
+                    _buildLocalStats(isDark),
                     const SizedBox(height: 16),
                     _buildActionsRow(isDark),
                     const SizedBox(height: 16),
-                    _buildStatsRow(isDark),
+                    _buildSeizedCard(isDark),
                     const SizedBox(height: 100),
                     _buildFooter(isDark),
                   ],
@@ -391,9 +403,8 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     final barColor = isDark ? const Color(0xff10182A) : Colors.white;
     final border = isDark ? const Color(0xff263550) : const Color(0xffE5EAF2);
     final textColor = isDark ? Colors.white : Colors.black;
-    final backBg = isDark
-        ? Colors.white.withOpacity(.08)
-        : const Color(0xffF3F6FA);
+    final backBg =
+    isDark ? Colors.white.withOpacity(.08) : const Color(0xffF3F6FA);
 
     return Container(
       height: 64,
@@ -423,10 +434,8 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
                 child: Container(
                   width: 44,
                   height: 44,
-                  decoration: BoxDecoration(
-                    color: backBg,
-                    shape: BoxShape.circle,
-                  ),
+                  decoration:
+                  BoxDecoration(color: backBg, shape: BoxShape.circle),
                   child: Icon(
                     Icons.arrow_back_ios_new_rounded,
                     size: 20,
@@ -491,7 +500,8 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     // Logo photo — pehle company photo, phir user photo.
     final companyPhotoUrl = _user?.company?.photoUrl.trim() ?? '';
     final userPhotoUrl = _user?.photoUrl.trim() ?? '';
-    final photoUrl = companyPhotoUrl.isNotEmpty ? companyPhotoUrl : userPhotoUrl;
+    final photoUrl =
+    companyPhotoUrl.isNotEmpty ? companyPhotoUrl : userPhotoUrl;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
@@ -532,10 +542,8 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
               ),
               child: Container(
                 margin: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: cardColor,
-                ),
+                decoration:
+                BoxDecoration(shape: BoxShape.circle, color: cardColor),
                 child: ClipOval(child: _buildLogo(photoUrl)),
               ),
             ),
@@ -646,6 +654,29 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     );
   }
 
+  Widget _logoInitials() {
+    return Center(
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          gradient: AppColors.blueGradient,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          _initials(_companyName),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            letterSpacing: .5,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _heroLine({
     required IconData icon,
     required Color iconColor,
@@ -672,29 +703,6 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
           ),
         ),
       ],
-    );
-  }
-
-  Widget _logoInitials() {
-    return Center(
-      child: Container(
-        width: 52,
-        height: 52,
-        decoration: BoxDecoration(
-          gradient: AppColors.blueGradient,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          _initials(_companyName),
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            letterSpacing: .5,
-          ),
-        ),
-      ),
     );
   }
 
@@ -809,9 +817,17 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     );
   }
 
-  // Remaining Days & Offline Records
-  Widget _buildApiStats(bool isDark) {
+  // Total Records & Remaining Days (local values)
+  Widget _buildLocalStats(bool isDark) {
     return _cardRow(
+      _infoCard(
+        isDark: isDark,
+        icon: Icons.list_sharp,
+        label: 'Total Records',
+        subtitle: 'Record',
+        value: _loading ? 0 : _companyTotalRecords,
+        onTap: () {},
+      ),
       _infoCard(
         isDark: isDark,
         icon: Icons.calendar_month_rounded,
@@ -820,40 +836,22 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
         value: _loading ? 0 : _remainingDays,
         onTap: () {},
       ),
-      _infoCard(
-        isDark: isDark,
-        icon: Icons.cloud_off_rounded,
-        label: 'Offline Records',
-        subtitle: 'Record',
-        value: _loading ? 0 : _offlineRecords,
-        onTap: () {},
-      ),
     );
   }
 
-  // My Account & Confirmed Cases
+  // Pending Confirmation & Confirmed Cases
   Widget _buildActionsRow(bool isDark) {
-    // return _cardRow(
-    //   _infoCard(
-    //     isDark: isDark,
-    //     icon: Icons.person_rounded,
-    //     label: 'My Account',
-    //     subtitle: 'Profile',
-    //     onTap: () {
-    //       Navigator.push(
-    //         context,
-    //         MaterialPageRoute(builder: (_) => const ProfileScreen()),
-    //       );
-    //     },
-    //   ),
-        return _cardRow(
+    return _cardRow(
       _infoCard(
         isDark: isDark,
-        icon: Icons.person_rounded,
+        icon: Icons.pending_actions_rounded,
         label: 'Pending Confirmation',
-        subtitle: 'Profile',
+        subtitle: 'Requests',
         value: _statsLoading ? 0 : _pendingConfirmations,
-        onTap: () {},
+        onTap: () => _goTo(
+          const PendingConfirmationPage(),
+          refreshOnReturn: true,
+        ),
       ),
       _infoCard(
         isDark: isDark,
@@ -861,58 +859,29 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
         label: 'Confirmed Cases',
         subtitle: 'Vehicles',
         value: _statsLoading ? 0 : _confirmedConfirmations,
-        onTap: () {},
+        onTap: () {
+          final token = SharedPreferenceService.getToken();
+          Navigator.push(
+              context, MaterialPageRoute(
+              builder: (context) => ConfirmedCases(token: token,)));
+        },
       ),
-    );
-  }
+        // onTap: () => _goTo(
+        //   ConfirmedCasesScreen(api: ConfirmationApi()),
+        //   refreshOnReturn: true,
+      );
+      }
 
-  Widget _buildStatsRow(bool isDark) {
+  Widget _buildSeizedCard(bool isDark) {
     return _infoCard(
       isDark: isDark,
       icon: Icons.car_crash_rounded,
       label: 'Total Seized',
-      subtitle: 'Vehicles',
+      subtitle: 'Seized',
       value: _statsLoading ? 0 : _inventoryConfirmed,
-      onTap: () {},
+      onTap: () => _goTo(const SeizedSuccessfullyScreen()),
     );
-
-    // My Account — abhi hidden
-    // _infoCard(
-    //   isDark: isDark,
-    //   icon: Icons.person_rounded,
-    //   label: 'My Account',
-    //   subtitle: 'Profile',
-    //   onTap: () {
-    //     Navigator.push(
-    //       context,
-    //       MaterialPageRoute(builder: (_) => const ProfileScreen()),
-    //     );
-    //   },
-    // ),
-
   }
-
-  // Pending Confirmation & Total Seized
-  // Widget _buildStatsRow(bool isDark) {
-  //   return _cardRow(
-  //     _infoCard(
-  //       isDark: isDark,
-  //       icon: Icons.pending_actions_rounded,
-  //       label: 'Pending Confirmation',
-  //       subtitle: 'Cases',
-  //       value: _statsLoading ? 0 : _inventoryConfirmed,
-  //       onTap: () {},
-  //      ),
-  //     // _infoCard(
-  //     //   isDark: isDark,
-  //     //   icon: Icons.car_crash_rounded,
-  //     //   label: 'Total Seized',
-  //     //   subtitle: 'Vehicles',
-  //     //   value: _statsLoading ? 0 : _inventoryConfirmed,
-  //     //   onTap: () {},
-  //     // ),
-  //   // );
-  // }
 
   // =========================================================
   // PAGE FOOTER
@@ -1059,7 +1028,7 @@ class _DrawerFooterState extends State<DrawerFooter> {
   }
 
   Future<void> _open(String url) async {
-    bool opened = false;
+    var opened = false;
     try {
       opened = await launchUrl(
         Uri.parse(url),

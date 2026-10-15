@@ -1,15 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:fastrecovery/Service/SharedPreferenceService.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'Confimation_cases/ConfirmedCases.dart';
+import 'Confimation_cases/Update_inverntory.dart';
 
 const String _kBase = 'https://fastrecovery.in/api';
 
 // Brand colors
 const Color _kBrandA = Color(0xFF38B6FF);
 const Color _kBrandB = Color(0xFF1D3FAE);
+const Color _kGreen = Color(0xFF16A34A);
 
 /// One row of GET /confirmations?view=inventory-confirmed
 class SeizedItem {
@@ -51,10 +56,34 @@ class SeizedItem {
     status: _s(j['status']),
     createdAt: DateTime.tryParse(_s(j['createdAt']))?.toLocal(),
   );
+  /// SeizedConfirmedDetailPage ke liye (wo Map<String, dynamic> leta hai)
+  Map<String, dynamic> toMap() => {
+    '_id': id,
+    'caseId': caseId,
+    'caseCode': caseCode,
+    'vehicleNumber': vehicleNumber,
+    'customerName': customerName,
+    'bankName': bankName,
+    'branchName': branchName,
+    'requestedByName': requestedByName,
+    'status': status,
+    'createdAt': createdAt?.toIso8601String(),
+  };
+
+  String get dateText {
+    final d = createdAt;
+    if (d == null) return '';
+    return '${d.day.toString().padLeft(2, '0')}/'
+        '${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
 }
 
+// ═════════════════════════════════════════════════════════════
+//                     SEIZED LIST SCREEN
+// ═════════════════════════════════════════════════════════════
 class SeizedSuccessfullyScreen extends StatefulWidget {
-  /// Called when a row is tapped (open your confirmation detail screen here).
+  /// Optional: custom handler for View / card tap.
+  /// If null, the built-in [SeizedDetailPage] is opened.
   final void Function(SeizedItem item)? onOpen;
 
   const SeizedSuccessfullyScreen({super.key, this.onOpen});
@@ -103,6 +132,7 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
     super.dispose();
   }
 
+  // ───────────────────────── Data ─────────────────────────
   Future<void> _fetch({int page = 1}) async {
     final append = page > 1;
     setState(() {
@@ -176,22 +206,7 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
     }
   }
 
-  void _search() {
-    _debounce?.cancel();
-    _query = _searchCtrl.text.trim();
-    FocusScope.of(context).unfocus();
-    _fetch();
-  }
-
-  void _reset() {
-    _debounce?.cancel();
-    _searchCtrl.clear();
-    _query = '';
-    FocusScope.of(context).unfocus();
-    setState(() {});
-    _fetch();
-  }
-
+  // ───────────────────────── Search ─────────────────────────
   void _onChanged(String _) {
     setState(() {}); // refresh clear icon
     _debounce?.cancel();
@@ -204,6 +219,68 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
     });
   }
 
+  void _onSubmitted(String _) {
+    _debounce?.cancel();
+    final q = _searchCtrl.text.trim();
+    FocusScope.of(context).unfocus();
+    if (q != _query) {
+      _query = q;
+      _fetch();
+    }
+  }
+
+  void _clearSearch() {
+    _debounce?.cancel();
+    _searchCtrl.clear();
+    FocusScope.of(context).unfocus();
+    final hadQuery = _query.isNotEmpty;
+    _query = '';
+    setState(() {});
+    if (hadQuery) _fetch();
+  }
+
+  // ───────────────────────── Navigation ─────────────────────────
+  // void _open(SeizedItem it) {
+  //   final token = SharedPreferenceService.getToken();
+  //   if (widget.onOpen != null) {
+  //     widget.onOpen!(it);
+  //     return;
+  //   }
+  //   Navigator.of(context).push(
+  //     MaterialPageRoute(builder: (_) => SeizedConfirmedDetailPage(token: token, item: {
+  //
+  //     },)),
+  //   );
+  // }
+
+
+
+  Future<void> _open(SeizedItem it) async {
+    // Custom handler diya ho to wahi chalega
+    if (widget.onOpen != null) {
+      widget.onOpen!(it);
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    if (!mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SeizedConfirmedDetailPage(
+          token: token,
+          item: it.toMap(),
+          // detail page mein kuch change ho (extra upload, update request)
+          // to list refresh ho jaye
+          onChanged: () {
+            if (mounted) _fetch();
+          },
+        ),
+      ),
+    );
+  }
+  // ───────────────────────── Build ─────────────────────────
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -218,12 +295,11 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
       body: Column(
         children: [
           _header(context),
-          // Search card overlapping the header
           Transform.translate(
             offset: const Offset(0, -22),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _searchCard(isDark, card, text, muted, border),
+              child: _searchField(isDark, card, text, muted, border),
             ),
           ),
           Expanded(
@@ -272,7 +348,7 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Seized Successfully',
+                  'Seized Vehicles',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -282,7 +358,9 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _loading ? 'Loading…' : '$_total vehicle${_total == 1 ? '' : 's'}',
+                  _loading
+                      ? 'Loading…'
+                      : '$_total vehicle${_total == 1 ? '' : 's'}',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.85),
                     fontSize: 12.5,
@@ -306,11 +384,10 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
     );
   }
 
-  // ───────────────────────── Search card ─────────────────────────
-  Widget _searchCard(
+  // ───────────────────────── Search field (no buttons) ─────────────────────────
+  Widget _searchField(
       bool isDark, Color card, Color text, Color muted, Color border) {
     return Container(
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: card,
         borderRadius: BorderRadius.circular(16),
@@ -322,90 +399,39 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
           ),
         ],
       ),
-      child: Column(
-        children: [
-          TextField(
-            controller: _searchCtrl,
-            onChanged: _onChanged,
-            onSubmitted: (_) => _search(),
-            textInputAction: TextInputAction.search,
-            style: TextStyle(color: text, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'Search vehicle, customer, chassis, loan…',
-              hintStyle: TextStyle(color: muted, fontSize: 13),
-              prefixIcon: Icon(Icons.search_rounded, color: muted, size: 22),
-              suffixIcon: _searchCtrl.text.isEmpty
-                  ? null
-                  : IconButton(
-                icon: Icon(Icons.close_rounded, color: muted, size: 20),
-                onPressed: _reset,
-              ),
-              filled: true,
-              fillColor: isDark ? Colors.white10 : const Color(0xFFF8FAFC),
-              isDense: true,
-              contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: _kBrandB, width: 1.4),
-              ),
-            ),
+      child: TextField(
+        controller: _searchCtrl,
+        onChanged: _onChanged,
+        onSubmitted: _onSubmitted,
+        textInputAction: TextInputAction.search,
+        style: TextStyle(color: text, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Search vehicle, customer, chassis, loan…',
+          hintStyle: TextStyle(color: muted, fontSize: 13),
+          prefixIcon: Icon(Icons.search_rounded, color: muted, size: 22),
+          suffixIcon: _searchCtrl.text.isEmpty
+              ? null
+              : IconButton(
+            icon: Icon(Icons.close_rounded, color: muted, size: 20),
+            onPressed: _clearSearch,
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: SizedBox(
-                  height: 44,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                          colors: [_kBrandA, _kBrandB]),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ElevatedButton.icon(
-                      onPressed: _search,
-                      icon: const Icon(Icons.search_rounded, size: 18),
-                      label: const Text('Search',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: SizedBox(
-                  height: 44,
-                  child: OutlinedButton.icon(
-                    onPressed: _reset,
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Reset',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: text,
-                      side: BorderSide(color: border),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          filled: true,
+          fillColor: card,
+          contentPadding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 15),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
           ),
-        ],
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: _kBrandB, width: 1.4),
+          ),
+        ),
       ),
     );
   }
@@ -479,11 +505,13 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Text(
               _query.isEmpty
-                  ? 'No cases with admin-confirmed inventory yet.'
+                  ? 'No seized vehicles yet.'
                   : 'No results found for "$_query".',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: muted, fontSize: 15, fontWeight: FontWeight.w500),
+                  color: muted,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500),
             ),
           ),
         ],
@@ -510,152 +538,178 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
   // ───────────────────────── Case card ─────────────────────────
   Widget _tile(SeizedItem it, bool isDark, Color card, Color text, Color muted,
       Color border) {
-    String date = '';
-    if (it.createdAt != null) {
-      final d = it.createdAt!;
-      date =
-      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-    }
     final bankLine =
     [it.bankName, it.branchName].where((s) => s.isNotEmpty).join(' • ');
 
-    return Material(
-      color: card,
-      borderRadius: BorderRadius.circular(16),
-      elevation: 0,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: widget.onOpen == null ? null : () => widget.onOpen!(it),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
+    return Container(
+      decoration: BoxDecoration(
+        color: card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _open(it),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // green accent strip
-                Container(
-                  width: 5,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF16A34A),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      bottomLeft: Radius.circular(16),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                it.vehicleNumber.isEmpty
-                                    ? '—'
-                                    : it.vehicleNumber,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.4,
-                                  color: text,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 9, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF16A34A)
-                                    .withOpacity(0.14),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.check_circle_rounded,
-                                      size: 12, color: Color(0xFF16A34A)),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'SEIZED',
-                                    style: TextStyle(
-                                      color: Color(0xFF16A34A),
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.4,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                // ── Top: vehicle number + status chip
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white10
+                            : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: isDark
+                                ? Colors.white24
+                                : const Color(0xFFCBD5E1)),
+                      ),
+                      child: Text(
+                        it.vehicleNumber.isEmpty ? '—' : it.vehicleNumber,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1,
+                          color: text,
                         ),
-                        const SizedBox(height: 10),
-                        if (it.customerName.isNotEmpty)
-                          _infoRow(Icons.person_outline_rounded,
-                              it.customerName, text, muted,
-                              bold: true),
-                        if (bankLine.isNotEmpty)
-                          _infoRow(Icons.account_balance_outlined, bankLine,
-                              muted, muted),
-                        if (it.caseCode.isNotEmpty)
-                          _infoRow(Icons.tag_rounded, 'Case ${it.caseCode}',
-                              muted, muted),
-                        if (it.requestedByName.isNotEmpty || date.isNotEmpty) ...[
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Divider(height: 1, color: border),
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: _kGreen.withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check_circle_rounded,
+                              size: 12, color: _kGreen),
+                          SizedBox(width: 4),
+                          Text(
+                            'SEIZED',
+                            style: TextStyle(
+                              color: _kGreen,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                            ),
                           ),
-                          Row(
-                            children: [
-                              if (it.requestedByName.isNotEmpty) ...[
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // ── Info rows
+                if (it.customerName.isNotEmpty)
+                  _infoRow(Icons.person_outline_rounded, it.customerName,
+                      text, muted,
+                      bold: true),
+                if (bankLine.isNotEmpty)
+                  _infoRow(Icons.account_balance_outlined, bankLine, muted,
+                      muted),
+                if (it.caseCode.isNotEmpty)
+                  _infoRow(Icons.tag_rounded, 'Case ${it.caseCode}', muted,
+                      muted),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(height: 1, color: border),
+                ),
+
+                // ── Footer: requested by / date + View button
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (it.requestedByName.isNotEmpty)
+                            Row(
+                              children: [
                                 Icon(Icons.badge_outlined,
                                     size: 14, color: muted),
                                 const SizedBox(width: 5),
                                 Flexible(
                                   child: Text(
                                     it.requestedByName,
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style:
-                                    TextStyle(color: muted, fontSize: 12),
+                                    style: TextStyle(
+                                        color: muted, fontSize: 12),
                                   ),
                                 ),
                               ],
-                              const Spacer(),
-                              if (date.isNotEmpty) ...[
+                            ),
+                          if (it.dateText.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
                                 Icon(Icons.calendar_today_outlined,
                                     size: 13, color: muted),
                                 const SizedBox(width: 5),
-                                Text(date,
-                                    style:
-                                    TextStyle(color: muted, fontSize: 12)),
+                                Text(it.dateText,
+                                    style: TextStyle(
+                                        color: muted, fontSize: 12)),
                               ],
-                            ],
-                          ),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      height: 38,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                              colors: [_kBrandA, _kBrandB]),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: ElevatedButton.icon(
+                          onPressed: () => _open(it),
+                          icon: const Icon(Icons.visibility_rounded,
+                              size: 16),
+                          label: const Text('View',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            padding:
+                            const EdgeInsets.symmetric(horizontal: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                if (widget.onOpen != null)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Icon(Icons.chevron_right_rounded, color: muted),
-                  ),
               ],
             ),
           ),
@@ -664,10 +718,11 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
     );
   }
 
-  Widget _infoRow(IconData icon, String value, Color valueColor, Color iconColor,
+  Widget _infoRow(
+      IconData icon, String value, Color valueColor, Color iconColor,
       {bool bold = false}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
           Icon(icon, size: 16, color: iconColor),
@@ -681,6 +736,190 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
                 color: valueColor,
                 fontSize: 13.5,
                 fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+//                     SEIZED DETAIL PAGE
+// ═════════════════════════════════════════════════════════════
+class SeizedDetailPage extends StatelessWidget {
+  final SeizedItem item;
+  const SeizedDetailPage({super.key, required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF0B1220) : const Color(0xFFF1F5F9);
+    final card = isDark ? const Color(0xFF162033) : Colors.white;
+    final text = isDark ? Colors.white : const Color(0xFF0F172A);
+    final muted = isDark ? Colors.white60 : const Color(0xFF64748B);
+    final border = isDark ? Colors.white12 : const Color(0xFFE2E8F0);
+    final top = MediaQuery.of(context).padding.top;
+
+    return Scaffold(
+      backgroundColor: bg,
+      body: Column(
+        children: [
+          // Header
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.fromLTRB(8, top + 8, 16, 24),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [_kBrandA, _kBrandB],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(26),
+                bottomRight: Radius.circular(26),
+              ),
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white, size: 20),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                const Expanded(
+                  child: Text(
+                    'Seized Vehicle Details',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Vehicle number + status
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: card,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: border),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        item.vehicleNumber.isEmpty ? '—' : item.vehicleNumber,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.5,
+                          color: text,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _kGreen.withOpacity(0.14),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle_rounded,
+                                size: 14, color: _kGreen),
+                            SizedBox(width: 6),
+                            Text(
+                              'SEIZED SUCCESSFULLY',
+                              style: TextStyle(
+                                color: _kGreen,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Details
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: card,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: border),
+                  ),
+                  child: Column(
+                    children: [
+                      _row(Icons.person_outline_rounded, 'Customer',
+                          item.customerName, text, muted, border),
+                      _row(Icons.account_balance_outlined, 'Bank',
+                          item.bankName, text, muted, border),
+                      _row(Icons.location_city_outlined, 'Branch',
+                          item.branchName, text, muted, border),
+                      _row(Icons.tag_rounded, 'Case Code', item.caseCode,
+                          text, muted, border),
+                      _row(Icons.badge_outlined, 'Requested By',
+                          item.requestedByName, text, muted, border),
+                      _row(Icons.flag_outlined, 'Status', item.status, text,
+                          muted, border),
+                      _row(Icons.calendar_today_outlined, 'Date',
+                          item.dateText, text, muted, border,
+                          last: true),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(IconData icon, String label, String value, Color text,
+      Color muted, Color border,
+      {bool last = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        border: last ? null : Border(bottom: BorderSide(color: border)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: _kBrandB),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 100,
+            child: Text(label,
+                style: TextStyle(color: muted, fontSize: 13)),
+          ),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '—' : value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: text,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),

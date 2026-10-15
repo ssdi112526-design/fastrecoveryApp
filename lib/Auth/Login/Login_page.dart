@@ -463,7 +463,7 @@ class _LoginScreenState extends State<LoginScreen> {
         children: [
           AppTextField(
             controller: _emailController,
-            label: 'Agent ID / Email',
+            label: 'Agent Email',
             hint: ' Email',
             icon: Icons.person_outline_rounded,
           ),
@@ -564,10 +564,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // =========================
-  // UI
-  // =========================
-  @override
   // =========================
   // UI
   // =========================

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 
 /// Labeled text input matching `.field` + `.input-wrap` from the prototype.
@@ -13,6 +14,8 @@ class AppTextField extends StatefulWidget {
     this.controller,
     this.onChanged,
     this.showToggle = false,
+    this.maxLength,
+    this.inputFormatters,
   });
 
   final String label;
@@ -23,6 +26,9 @@ class AppTextField extends StatefulWidget {
   final TextInputType? keyboardType;
   final TextEditingController? controller;
   final ValueChanged<String>? onChanged;
+  final List<TextInputFormatter>? inputFormatters;
+  final int? maxLength;
+
 
   @override
   State<AppTextField> createState() => _AppTextFieldState();
@@ -79,9 +85,12 @@ class _AppTextFieldState extends State<AppTextField> {
                     controller: widget.controller,
                     obscureText: _obscured,
                     keyboardType: widget.keyboardType,
+                    inputFormatters: widget.inputFormatters,
+                    maxLength: widget.maxLength,
                     onChanged: widget.onChanged,
                     style: AppTextStyles.body(size: 14.5),
                     decoration: InputDecoration(
+                      counterText: '', // taaki neeche "0/10" na dikhe
                       hintText: widget.hint,
                       hintStyle: AppTextStyles.body(
                         size: 14.5,
@@ -247,25 +256,12 @@ class AuthHero extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (showBadge) ...[
-                  Container(
-                    width: 44,
-                    height: 44,
-                    margin: const EdgeInsets.only(bottom: 14),
-                    decoration: BoxDecoration(
-                      gradient: AppColors.blueGradient,
-                      borderRadius: BorderRadius.circular(13),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.blue600.withOpacity(0.45),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    alignment: Alignment.center,
-                    child: Text('FR',
-                        style: AppTextStyles.display(
-                            size: 15, weight: FontWeight.w800, color: Colors.white)),
+                  Image.asset(
+                  'assets/images/fastrecovery_logo_2dark.png',
+                    width: 155,
+                    height: 48,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.centerLeft,
                   ),
                 ],
                 Text(title,

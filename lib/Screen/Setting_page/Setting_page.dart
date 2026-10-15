@@ -6,23 +6,21 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-// ── Apne project ke hisaab se in 3 imports ka path check karo ───────────────
-import '../Service/Location_tracking_permission.dart';
-import '../main.dart'; // themeNotifier, toggleTheme
-import '../theme/app_theme.dart'; // AppColors
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  1. LINKS  (Play Store ke liye REAL links daalna zaroori hai)
-// ═════════════════════════════════════════════════════════════════════════════
+// ── Apne project ke hisaab se in imports ka path check karo ─────────────────
+import '../../Service/Location_tracking_permission.dart';
+import '../../main.dart'; // themeNotifier, toggleTheme
+import '../../theme/app_theme.dart'; // AppColors
+import 'About_Us_page.dart';
+import 'ContactSupportPage.dart';
+import 'FAQs.dart';
+import 'RefundPolicyPage.dart';
 
 abstract final class _Links {
   static const privacyPolicy = 'https://www.fastrecovery.in/privacy-policy';
   static const terms = 'https://www.fastrecovery.in/terms';
-  static const supportEmail = 'support@fastrecovery.in';
   static const appName = 'FastRecovery';
 
   static const removeUser = 'https://www.fastrecovery.in/api/repo-users/remove';
-  static const testAgentId = '4'; // TODO: login ke baad real agentId yahan se hatao
 }
 
 
@@ -41,17 +39,14 @@ class _C {
       dark ? const Color(0xff8A97B0) : const Color(0xff64748B);
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  3. PAGE
-// ═════════════════════════════════════════════════════════════════════════════
 
 class SettingsPage extends StatefulWidget {
   /// Logout confirm hone ke baad chalega. Yahin token clear karo, location
   /// tracking band karo aur LoginScreen par bhejo.
   final Future<void> Function() onLogout;
 
-  /// Delete account confirm hone ke baad chalega (API call yahan lagao).
-  /// Na do to support email ka request khulega.
+  /// Optional: custom delete-account logic. Na do to default API call
+  /// (`_Links.removeUser`) chalegi aur success par `onLogout` call hoga.
   final Future<void> Function()? onDeleteAccount;
 
   const SettingsPage({
@@ -68,6 +63,18 @@ class _SettingsPageState extends State<SettingsPage> {
   PackageInfo? _info;
   bool _deleting = false;
 
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _info = info);
+    });
+  }
+
+  String get _versionLabel =>
+      _info == null ? '...' : '${_info!.version} (${_info!.buildNumber})';
+
+  // ── Delete account API ─────────────────────────────────────────────────────
   /// Success par null, fail par user ko dikhane wala message.
   Future<String?> _removeAccountApi() async {
     final prefs = await SharedPreferences.getInstance();
@@ -122,23 +129,16 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    PackageInfo.fromPlatform().then((info) {
-      if (mounted) setState(() => _info = info);
-    });
-  }
-
-  String get _versionLabel =>
-      _info == null ? '...' : '${_info!.version} (${_info!.buildNumber})';
-
   // ── Helpers ────────────────────────────────────────────────────────────────
   void _snack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _push(Widget page) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
   Future<void> _open(String url, {LaunchMode? mode}) async {
@@ -153,22 +153,6 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _emailSupport(String subject) async {
-    final body = 'App version: $_versionLabel\n\n';
-    final uri = Uri(
-      scheme: 'mailto',
-      path: _Links.supportEmail,
-      query: 'subject=${Uri.encodeComponent(subject)}'
-          '&body=${Uri.encodeComponent(body)}',
-    );
-    try {
-      final ok = await launchUrl(uri);
-      if (!ok) _snack('No email app found on this device');
-    } catch (_) {
-      _snack('No email app found on this device');
-    }
-  }
-
   Future<void> _rateApp() async {
     final pkg = _info?.packageName;
     if (pkg == null) return;
@@ -180,35 +164,6 @@ class _SettingsPageState extends State<SettingsPage> {
       if (ok) return;
     } catch (_) {/* Play Store app nahi hai, browser try karte hain */}
     await _open('https://play.google.com/store/apps/details?id=$pkg');
-  }
-
-  void _showAbout() {
-    showAboutDialog(
-      context: context,
-      applicationName: _Links.appName,
-      applicationVersion: _versionLabel,
-      applicationIcon: Container(
-        width: 52,
-        height: 52,
-        decoration: BoxDecoration(
-          color: AppColors.blue600.withOpacity(.10),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: const Icon(
-          Icons.local_shipping_rounded,
-          color: AppColors.blue600,
-          size: 28,
-        ),
-      ),
-      applicationLegalese: '© ${DateTime.now().year} ${_Links.appName}',
-      children: const [
-        SizedBox(height: 14),
-        Text(
-          'FastRecovery helps repo agencies search vehicles, share '
-              'confirmations and manage their field team.',
-        ),
-      ],
-    );
   }
 
   Future<void> _confirmLogout() async {
@@ -293,128 +248,137 @@ class _SettingsPageState extends State<SettingsPage> {
           children: [
             // ── Appearance ──
             const _SectionLabel('Appearance'),
-            _Tile(
-              leading: ValueListenableBuilder<ThemeMode>(
-                valueListenable: themeNotifier,
-                builder: (context, mode, _) {
-                  final dark = mode == ThemeMode.dark;
-                  return _IconBadge(
-                    icon: dark
-                        ? Icons.dark_mode_rounded
-                        : Icons.light_mode_rounded,
-                    color: dark ? AppColors.gold400 : AppColors.blue600,
-                  );
-                },
+            _Group(children: [
+              _Tile(
+                leading: ValueListenableBuilder<ThemeMode>(
+                  valueListenable: themeNotifier,
+                  builder: (context, mode, _) {
+                    final dark = mode == ThemeMode.dark;
+                    return _IconBadge(
+                      icon: dark
+                          ? Icons.dark_mode_rounded
+                          : Icons.light_mode_rounded,
+                      color: dark ? AppColors.gold400 : AppColors.blue600,
+                    );
+                  },
+                ),
+                title: 'Dark Mode',
+                subtitle: 'Switch between light and dark theme',
+                trailing: ValueListenableBuilder<ThemeMode>(
+                  valueListenable: themeNotifier,
+                  builder: (context, mode, _) {
+                    final dark = mode == ThemeMode.dark;
+                    return Switch(
+                      value: dark,
+                      activeColor: AppColors.gold400,
+                      activeTrackColor: AppColors.gold400.withOpacity(.25),
+                      inactiveThumbColor: AppColors.blue600,
+                      inactiveTrackColor: AppColors.blue600.withOpacity(.12),
+                      onChanged: toggleTheme,
+                    );
+                  },
+                ),
               ),
-              title: 'Dark Mode',
-              subtitle: 'Appearance',
-              trailing: ValueListenableBuilder<ThemeMode>(
-                valueListenable: themeNotifier,
-                builder: (context, mode, _) {
-                  final dark = mode == ThemeMode.dark;
-                  return Switch(
-                    value: dark,
-                    activeColor: AppColors.gold400,
-                    activeTrackColor: AppColors.gold400.withOpacity(.25),
-                    inactiveThumbColor: AppColors.blue600,
-                    inactiveTrackColor: AppColors.blue600.withOpacity(.12),
-                    onChanged: toggleTheme,
-                  );
-                },
-              ),
-            ),
+            ]),
 
-            // ── Privacy ──
-            const _SectionLabel('Privacy & Permissions'),
-            // _Tile(
-            //   icon: Icons.my_location_rounded,
-            //   color: const Color(0xff2563EB),
-            //   title: 'Location sharing',
-            //   subtitle: 'Manage location permission',
-            //   onTap: Geolocator.openAppSettings,
-            // ),
-            // const SizedBox(height: 8),
-            // _Tile(
-            //   icon: Icons.privacy_tip_outlined,
-            //   color: const Color(0xff7C3AED),
-            //   title: 'Privacy Policy',
-            //   subtitle: 'How we use your data',
-            //   onTap: () => _open(_Links.privacyPolicy),
-            // ),
-            const SizedBox(height: 8),
-            _Tile(
-              icon: Icons.description_outlined,
-              color: const Color(0xff0D9488),
-              title: 'Terms & Conditions',
-              subtitle: 'Rules of using the app',
-              onTap: () => _open(_Links.terms),
-            ),
+            // ── Privacy & Permissions ──
+            // const _SectionLabel('Privacy & Permissions'),
+            // ── Legal ──
+            const _SectionLabel('Legal'),
+            _Group(children: [
+              _Tile(
+                icon: Icons.description_outlined,
+                color: const Color(0xff0D9488),
+                title: 'Terms & Conditions',
+                subtitle: 'Rules of using the app',
+                onTap: () => _open(_Links.terms),
+              ),
+              _Tile(
+                icon: Icons.receipt_long_outlined,
+                color: const Color(0xffF59E0B),
+                title: 'Refund Policy',
+                subtitle: 'Refund and cancellation terms',
+                onTap: () => _push(const RefundPolicyPage()),
+              ),
+            ]),
 
             // ── Support ──
             const _SectionLabel('Support'),
-            _Tile(
-              icon: Icons.support_agent_rounded,
-              color: const Color(0xff16A34A),
-              title: 'Contact support',
-              subtitle: _Links.supportEmail,
-              onTap: () => _emailSupport('${_Links.appName} support'),
-            ),
-            if (isAndroid) ...[
-              const SizedBox(height: 8),
+            _Group(children: [
               _Tile(
-                icon: Icons.star_rate_rounded,
-                color: const Color(0xffF59E0B),
-                title: 'Rate this app',
-                subtitle: 'Tell us how we are doing',
-                onTap: _rateApp,
+                icon: Icons.support_agent_rounded,
+                color: const Color(0xff16A34A),
+                title: 'Contact Us',
+                subtitle: 'Phone, email and office address',
+                onTap: () => _push(const ContactSupportPage()),
               ),
-            ],
+              if (isAndroid)
+                _Tile(
+                  icon: Icons.star_rate_rounded,
+                  color: const Color(0xffF59E0B),
+                  title: 'Rate this app',
+                  subtitle: 'Tell us how we are doing',
+                  onTap: _rateApp,
+                ),
+            ]),
 
             // ── About ──
-             const _SectionLabel('About'),
-            // _Tile(
-            //   icon: Icons.info_outline_rounded,
-            //   color: const Color(0xff2563EB),
-            //   title: 'About ${_Links.appName}',
-            //   subtitle: 'App details and licenses',
-            //   onTap: _showAbout,
-            // ),
-            const SizedBox(height: 8),
-            _Tile(
-              icon: Icons.verified_outlined,
-              color: const Color(0xff64748B),
-              title: 'App version',
-              subtitle: 'Current installed version',
-              trailing: Text(
-                _versionLabel,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                  color: c.primaryText,
+            const _SectionLabel('About'),
+            _Group(children: [
+              _Tile(
+                icon: Icons.info_outline_rounded,
+                color: const Color(0xff2563EB),
+                title: 'About Us',
+                subtitle: 'Who we are and our mission',
+                onTap: () => _push(const AboutUsPage()),
+              ),
+              _Tile(
+                icon: Icons.verified_outlined,
+                color: const Color(0xff64748B),
+                title: 'App version',
+                subtitle: 'Current installed version',
+                trailing: Text(
+                  _versionLabel,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: c.primaryText,
+                  ),
                 ),
               ),
-            ),
+              _Tile(
+                icon: Icons.help_outline_rounded,
+                color: const Color(0xff7C3AED),
+                title: 'FAQs',
+                subtitle: 'Answers to common questions',
+                onTap: () => _push(const FaqPage()),
+              ),
+            ]),
 
             // ── Account ──
-            const _SectionLabel('Account'),
-            _LogoutTile(onTap: _confirmLogout),
-            const SizedBox(height: 8),
-            _Tile(
-              icon: Icons.delete_outline_rounded,
-              color: Colors.redAccent,
-              title: 'Delete account',
-              subtitle: _deleting ? 'Deleting...' : 'Permanently remove your account',
-              onTap: _deleting ? null : _confirmDeleteAccount,
-            ),
+            const _SectionLabel('Logout Account'),
+            _Group(children: [
+              _LogoutTile(onTap: _confirmLogout),
+              ],),
+            const _SectionLabel('Delete Account'),
+              _Tile(
+                icon: Icons.delete_outline_rounded,
+                color: Colors.redAccent,
+                title: 'Delete account',
+                subtitle: _deleting
+                    ? 'Deleting...'
+                    : 'Permanently remove your account',
+                onTap: _deleting ? null : _confirmDeleteAccount,
+              ),
 
-            const SizedBox(height: 18),
+            const SizedBox(height: 22),
             Center(
               child: Text(
-                'FastRecovery • ${DateTime.now().year}',
+                '${_Links.appName} • ${DateTime.now().year}',
                 style: TextStyle(
-                  fontSize: 9.5,
+                  fontSize: 10.5,
                   fontWeight: FontWeight.w600,
-                  color: c.secondaryText.withOpacity(.7),
+                  color: c.secondaryText.withOpacity(.8),
                 ),
               ),
             ),
@@ -428,6 +392,24 @@ class _SettingsPageState extends State<SettingsPage> {
 // ═════════════════════════════════════════════════════════════════════════════
 //  4. SMALL WIDGETS
 // ═════════════════════════════════════════════════════════════════════════════
+
+/// Tiles ke beech apne aap 8px gap deta hai.
+class _Group extends StatelessWidget {
+  final List<Widget> children;
+  const _Group({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          children[i],
+        ],
+      ],
+    );
+  }
+}
 
 class _SectionLabel extends StatelessWidget {
   final String text;
@@ -505,8 +487,7 @@ class _Tile extends StatelessWidget {
       child: ListTile(
         dense: true,
         onTap: onTap,
-        contentPadding:
-        const EdgeInsets.symmetric(horizontal: 13, vertical: 2),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 2),
         leading: leading ?? _IconBadge(icon: icon!, color: color!),
         title: Text(
           title,
