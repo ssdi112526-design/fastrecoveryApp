@@ -34,8 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const String _searchUrl = '$_baseUrl/api/repo-cases';
   static const String _profileUrl = '$_baseUrl/api/Auth/profile';
   static const String _loginUrl = '$_baseUrl/api/Auth/login';
-  static const String _verifyPanelUrl =
-      '$_baseUrl/api/repo-admin/verify-agent-panel';
+  static const String _verifyPanelUrl = '$_baseUrl/api/repo-admin/verify-agent-panel';
 
   // Dashboard ek baar unlock hone ke baad true. Logout par prefs.clear() isse hata deta hai.
   static const String _kDashboardUnlocked = 'dashboard_unlocked';

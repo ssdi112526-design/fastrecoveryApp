@@ -13,6 +13,7 @@ import '../../theme/app_theme.dart'; // AppColors
 import 'About_Us_page.dart';
 import 'ContactSupportPage.dart';
 import 'FAQs.dart';
+import 'Privacy_policy.dart';
 import 'RefundPolicyPage.dart';
 
 abstract final class _Links {
@@ -293,6 +294,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 subtitle: 'Rules of using the app',
                 onTap: () => _open(_Links.terms),
               ),
+               _Tile(
+                icon: Icons.policy,
+                color: const Color(0xff0D9488),
+                title: 'Privacy Policy',
+                subtitle: 'Rules of using the app',
+                onTap: () =>  _push( const PrivacyPolicyScreen()),
+              ),
+
               _Tile(
                 icon: Icons.receipt_long_outlined,
                 color: const Color(0xffF59E0B),
