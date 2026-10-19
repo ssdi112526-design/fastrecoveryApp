@@ -68,8 +68,8 @@ class _OfflineSyncCardState extends State<OfflineSyncCard> {
           ),
           title: const Text('Sync Complete'),
           content: Text(
-            'Saara data download ho gaya (${_fmt(svc.localCount)} records). '
-                'Ab aap bina internet ke bhi search kar sakte ho.',
+            'All data has been downloaded (${_fmt(svc.localCount)} records). '
+                'You can now search even without internet.',
             textAlign: TextAlign.center,
           ),
           actionsAlignment: MainAxisAlignment.center,

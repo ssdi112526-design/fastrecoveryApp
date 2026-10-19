@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import '../Service/SharedPreferenceService.dart';
 import '../Widget/Common_widget.dart';
 import '../theme/app_theme.dart';
-import 'Succes_screen.dart';
+import 'success_screen.dart';
 
 class NewPasswordScreen extends StatefulWidget {
   final String? token;
@@ -26,7 +26,7 @@ class NewPasswordScreen extends StatefulWidget {
 
 class _NewPasswordScreenState extends State<NewPasswordScreen> {
   static const String _resetUrl =
-      'https://fastrecovery.in/api/auth/forgot-password/reset';
+      'https://fastrecovery.in/api/Auth/forgot-password/reset';
 
   String _password = '';
   String _confirmPassword = '';
@@ -125,7 +125,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
 
     try {
       final uri = Uri.parse(
-        'https://fastrecovery.in/api/auth/forgot-password/reset',
+        'https://fastrecovery.in/api/Auth/forgot-password/reset',
       );
 
       debugPrint('[RESET DEBUG] POST $uri');

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../Widget/Common_widget.dart';
 import '../theme/app_theme.dart';
-import 'Login/Login_page.dart';
+import 'login/login_page.dart';
 
 class SuccessScreen extends StatelessWidget {
   const SuccessScreen({super.key});

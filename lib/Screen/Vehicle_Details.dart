@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../Model_class/vehcial_detail_model.dart';
+import '../Model_class/vehicle_detail_model.dart';
 import '../theme/app_theme.dart';
 
 class _Recipient {

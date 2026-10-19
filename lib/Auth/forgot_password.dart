@@ -49,11 +49,11 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   static const String _accountsUrl =
-      'https://www.fastrecovery.in/api/auth/forgot-password/accounts';
+      'https://www.fastrecovery.in/api/Auth/forgot-password/accounts';
 
   // ✅ Naya send-otp API  (body: {phone, userId})
   static const String _sendOtpUrl =
-      'https://fastrecovery.in/api/auth/forgot-password/send-otp';
+      'https://fastrecovery.in/api/Auth/forgot-password/send-otp';
 
   static final RegExp _tenDigits = RegExp(r'^[0-9]{10}$');
 

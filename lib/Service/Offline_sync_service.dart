@@ -43,7 +43,7 @@ class OfflineSyncService extends ChangeNotifier {
 
   static const String _url =
       'https://www.fastrecovery.in/api/repo-cases/offline-sync/records';
-  static const int _pageSize = 1000;
+  static const int _pageSize = 10000;
 
   // Phone aur server ki clock ka farq cover karne ke liye. Upsert hai, duplicate safe.
   static const Duration _sinceBuffer = Duration(minutes: 5);

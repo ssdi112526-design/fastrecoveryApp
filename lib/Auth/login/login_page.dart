@@ -6,9 +6,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../Service/Location_tracking_permission.dart';
 import '../../Service/SharedPreferenceService.dart';
 import '../../Widget/Common_widget.dart';
+import '../../auth/forgot_password.dart';
+import '../../auth/sign_up/GEt_start.dart';
 import '../../theme/app_theme.dart';
-import '../Forgetpassword_screen.dart';
-import '../Sign_up option/GEt_start.dart';
+
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -32,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _passwordError;
 
   static const String _loginUrl =
-      'https://www.fastrecovery.in/api/auth/repo-agent-login';
+      'https://www.fastrecovery.in/api/Auth/repo-agent-login';
 
   // Premium palette (matches the FastRecovery wordmark)
   static const Color _navy = Color(0xFF0C1220);
@@ -140,7 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return emailErr == null && passwordErr == null;
   }
 
-// Login screen ki file ke upar ye import add karo (path apne folder ke hisaab se):
+// login screen ki file ke upar ye import add karo (path apne folder ke hisaab se):
 // import 'location_tracking_service.dart';
 
   Future<void> _login() async {
@@ -185,7 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
         final user = data['user'];
 
         if (token == null || token.isEmpty) {
-          if (mounted) _showMessage('Login successful but token not received.');
+          if (mounted) _showMessage('login successful but token not received.');
           return;
         }
 
@@ -290,7 +291,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               Row(
                 children: [
-                  Expanded(child: _tabButton('Login', _AuthTab.login)),
+                  Expanded(child: _tabButton('login', _AuthTab.login)),
                   Expanded(child: _tabButton('Register', _AuthTab.register)),
                 ],
               ),
@@ -613,7 +614,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 4),
                         Text(
                           _selectedTab == _AuthTab.login
-                              ? 'Sign in to your agency workspace '
+                              ? 'Sign in to your agent workspace '
                               : 'Register your company or join with a code',
                           textAlign: TextAlign.center,
                           maxLines: 2,

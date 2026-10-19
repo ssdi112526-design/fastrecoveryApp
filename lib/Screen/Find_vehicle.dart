@@ -5,15 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../Auth/Login/Login_page.dart';
-import '../Model_class/Proffile_model.dart';
-import '../Model_class/vehcial_detail_model.dart';
+import '../auth/login/login_page.dart';
+import '../Model_class/profile_model.dart';
+import '../Model_class/vehicle_detail_model.dart';
 import '../Service/Location_tracking_permission.dart';
 import '../Service/Offline_sync_service.dart';
 import '../Widget/Offline_sync_card.dart';
 import '../db_helper/Offline_DB_helper.dart';
 import '../theme/app_theme.dart';
-import 'Dashboard.dart';
+import 'dashboard.dart';
 import 'ID_card.dart';
 import 'Profile_page.dart';
 import 'Total_Seized.dart';
@@ -32,9 +32,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // ============================================================
   static const String _baseUrl = 'https://www.fastrecovery.in';
   static const String _searchUrl = '$_baseUrl/api/repo-cases';
-  static const String _profileUrl = '$_baseUrl/api/auth/profile';
-  static const String _loginUrl = '$_baseUrl/api/auth/login';
-// static const String _loginUrl = '$_baseUrl/api/auth/login';   // ← hata do
+  static const String _profileUrl = '$_baseUrl/api/Auth/profile';
+  static const String _loginUrl = '$_baseUrl/api/Auth/login';
   static const String _verifyPanelUrl =
       '$_baseUrl/api/repo-admin/verify-agent-panel';
 
@@ -259,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return ok == true;
   }
 
-  /// Login API se password check karta hai (response ka token use nahi karte).
+  /// login API se password check karta hai (response ka token use nahi karte).
   /// Agent panel unlock API se password verify karta hai.
   Future<_VerifyResult> _verifyPassword(String password) async {
     try {
@@ -678,7 +677,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _searchResults = results;
         _hasMore = false; // local mein pagination nahi
       });
-
       if (results.isEmpty) {
         final masked = '*' * (isVehicle ? _vehicleDigits : _chassisDigits);
         _showMessage(
@@ -748,6 +746,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<Map<String, dynamic>> _extractResults(dynamic body) {
+
     if (body is! Map) return [];
 
     const keys = ['items', 'data', 'results', 'cases', 'records'];
@@ -775,7 +774,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
       backgroundColor: isDark ? const Color(0xff0B1220) : AppColors.paper,
       drawer: _buildDrawer(),
@@ -1051,10 +1049,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHeader(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-        18,
-        MediaQuery.of(context).padding.top + 16,
-        22,
-        50,
+        18, MediaQuery.of(context).padding.top + 16, 22, 50,
       ),
       decoration: const BoxDecoration(
         gradient: AppColors.headerGradient,

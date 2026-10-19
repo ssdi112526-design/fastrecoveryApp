@@ -16,12 +16,12 @@ import 'Profile_page.dart';
 // ═════════════════════════════════════════════════════════════════════════════
 
 abstract final class _Api {
-  /// Login jis host par hota hai wahi use karo (www ke saath ya bina).
+  /// login jis host par hota hai wahi use karo (www ke saath ya bina).
   static const baseUrl = 'https://www.fastrecovery.in';
-  static const idCardUrl = '$baseUrl/api/auth/id-card-data';
+  static const idCardUrl = '$baseUrl/api/Auth/id-card-data';
   static const timeout = Duration(seconds: 20);
 
-  /// Login screen jis key mein token save karti hai (pehla non-empty milega).
+  /// login screen jis key mein token save karti hai (pehla non-empty milega).
   static const tokenKeys = [
     'authToken',
     'token',

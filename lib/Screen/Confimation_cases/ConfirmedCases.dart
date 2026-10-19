@@ -535,7 +535,7 @@ Future<void> _openVideo(
   await _launch(context, Uri.parse(url), 'Could not open video');
 }
 
-/// PDF: auth ke saath download karke phone ke PDF viewer me kholta hai.
+/// PDF: Auth ke saath download karke phone ke PDF viewer me kholta hai.
 Future<void> _openPdf(BuildContext context, String path, String? token) async {
   _toast(context, 'Opening PDF…', error: false);
   try {

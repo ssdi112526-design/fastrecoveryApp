@@ -2,10 +2,10 @@
 // import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:fastrecovery/Screen/Find_vehicle.dart';
 import 'package:flutter/material.dart';
-import 'Screen/Dashboard.dart';
+import 'Screen/dashboard.dart';
 import 'Service/SharedPreferenceService.dart';
 import 'Splash_screen/Splash_screen.dart';
-import 'Auth/Login/Login_page.dart';
+import 'auth/login/login_page.dart';
 
 // Global theme notifier
  final ValueNotifier<ThemeMode> themeNotifier =

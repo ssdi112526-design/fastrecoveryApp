@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../Model_class/Proffile_model.dart';
+import '../Model_class/profile_model.dart';
 import '../Service/SharedPreferenceService.dart';
 import '../theme/app_theme.dart';
 
@@ -58,10 +58,10 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   static const String _profileUrl =
-      'https://www.fastrecovery.in/api/auth/profile';
+      'https://www.fastrecovery.in/api/Auth/profile';
 
   static const String _photoUploadUrl =
-      'https://www.fastrecovery.in/api/auth/profile/photo';
+      'https://www.fastrecovery.in/api/Auth/profile/photo';
 
   static const String _baseUrl = 'https://www.fastrecovery.in';
 

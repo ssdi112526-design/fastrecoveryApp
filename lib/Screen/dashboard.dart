@@ -1,13 +1,13 @@
 import 'dart:convert';
-import 'package:fastrecovery/Screen/Confimation_cases/Update_inverntory.dart' hide ConfirmedCases;
+import 'package:fastrecovery/Screen/Confimation_cases/update_inventory.dart'hide ConfirmedCases;
 import 'package:fastrecovery/Service/SharedPreferenceService.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../Model_class/Proffile_model.dart';
 import '../../theme/app_theme.dart';
+import '../Model_class/profile_model.dart';
 import '../Service/Location_tracking_permission.dart';
 import 'Confimation_cases/ConfirmedCases.dart';
 import 'Pending_confirmed.dart';
@@ -219,13 +219,13 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     }
   }
 
-  /// GET /api/auth/profile -> ProfileResponse -> UserModel
+  /// GET /api/Auth/profile -> ProfileResponse -> UserModel
   Future<UserModel?> _getProfile(
       Map<String, String> headers,
       SharedPreferences prefs,
       ) async {
     final response = await http
-        .get(Uri.parse('$_baseUrl/api/auth/profile'), headers: headers)
+        .get(Uri.parse('$_baseUrl/api/Auth/profile'), headers: headers)
         .timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 401) throw Exception('Session expired');

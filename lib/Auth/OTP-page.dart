@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:fastrecovery/Service/SharedPreferenceService.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import '../Screen/Find_vehicle.dart';
+import '../Screen/Activation_Payment_Screen.dart';
 import '../Widget/Common_widget.dart';
 import '../theme/app_theme.dart';
 import 'New_password_screen.dart';
@@ -13,21 +13,25 @@ class OtpScreen extends StatefulWidget {
   const OtpScreen({
     super.key,
     required this.fromSignup,
-    this.identifier = '', // mobile ya email jis par OTP gaya
+    this.identifier = '', // mobile number jis par OTP gaya
     this.userId = '', // forgot-password: select kiye hue account ki id
-    this.maskedPhone = '', // API se aaya: ********8500
-    this.expiresInSeconds = 600, // API: expiresInSeconds
-    this.resendAfterSeconds = 60, // API: resendAvailableInSeconds
+    this.registrationId = '', // signup: register API se aaya
+    this.maskedPhone = '', // API se aaya: ********2589
+    this.expiresInSeconds = 600,
+    this.resendAfterSeconds = 60,
+    this.isAgent = false, // true: agent self-registration OTP
   });
 
-  /// true  → signup verify → Home
+  /// true  → company signup verify → Activation payment
   /// false → forgot-password → New Password
   final bool fromSignup;
   final String identifier;
   final String userId;
+  final String registrationId;
   final String maskedPhone;
   final int expiresInSeconds;
   final int resendAfterSeconds;
+  final bool isAgent;
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -36,24 +40,35 @@ class OtpScreen extends StatefulWidget {
 class _OtpScreenState extends State<OtpScreen> {
   // ── Forgot-password APIs ──
   static const String _forgotVerifyUrl =
-      'https://fastrecovery.in/api/auth/forgot-password/verify-otp';
+      'https://fastrecovery.in/api/Auth/forgot-password/verify-otp';
   static const String _forgotSendUrl =
-      'https://fastrecovery.in/api/auth/forgot-password/send-otp';
+      'https://fastrecovery.in/api/Auth/forgot-password/send-otp';
 
-  // ── Signup APIs (pehle jaise) ──
-  // TODO: apne backend ke sahi endpoints daalo
+  // ── Company signup APIs ──
   static const String _signupVerifyUrl =
-      'https://www.fastrecovery.in/api/auth/verify-otp';
+      'https://fastrecovery.in/api/companies/register/verify-otp';
+
+  // TODO: web pe "Resend" dabake Network tab se is URL ko confirm karo.
+  // (Ye guess hai, verify-otp wale pattern par bana hai.)
   static const String _signupResendUrl =
-      'https://www.fastrecovery.in/api/auth/forgot-password';
+      'https://fastrecovery.in/api/companies/register/resend-otp';
+
+  // ── Agent self-registration APIs ──
+  // TODO: web pe agent registration ka OTP dalte waqt Network tab se dono URL
+  // confirm karo (ye guess hain, agent-register wale pattern par bane hain).
+  static const String _agentVerifyUrl =
+      'https://fastrecovery.in/api/auth/agent-register/verify-otp';
+  static const String _agentResendUrl =
+      'https://fastrecovery.in/api/auth/agent-register/resend-otp';
 
   final List<TextEditingController> _controllers =
   List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
 
   Timer? _timer;
-  late int _expiryLeft; // OTP kitni der mein expire hoga
-  late int _resendLeft; // resend kitni der baad available hoga
+  late int _expiryLeft;
+  late int _resendLeft;
+  late String _registrationId;
   String? _error;
   bool _isVerifying = false;
   bool _isResending = false;
@@ -61,6 +76,7 @@ class _OtpScreenState extends State<OtpScreen> {
   @override
   void initState() {
     super.initState();
+    _registrationId = widget.registrationId;
     _expiryLeft = widget.expiresInSeconds;
     _resendLeft = widget.resendAfterSeconds;
     _startTimer();
@@ -130,6 +146,9 @@ class _OtpScreenState extends State<OtpScreen> {
     }
   }
 
+  Map<String, dynamic> _asMap(dynamic v) =>
+      v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
+
   bool _isOk(http.Response r, Map<String, dynamic>? body) =>
       r.statusCode >= 200 && r.statusCode < 300 && body?['success'] != false;
 
@@ -148,7 +167,7 @@ class _OtpScreenState extends State<OtpScreen> {
     if (val.isNotEmpty && i < 5) {
       _focusNodes[i + 1].requestFocus();
     } else if (val.isEmpty && i > 0) {
-      _focusNodes[i - 1].requestFocus(); // delete karne par pichle box par
+      _focusNodes[i - 1].requestFocus();
     }
   }
 
@@ -166,7 +185,7 @@ class _OtpScreenState extends State<OtpScreen> {
     final otp = _otp;
     if (otp.length != 6) {
       setState(() => _error = 'Enter the complete 6-digit code');
-      return; // ← adhura OTP ho to aage nahi jayega
+      return;
     }
     if (_expiryLeft <= 0) {
       setState(() => _error = 'Code expired. Please request a new one.');
@@ -181,32 +200,80 @@ class _OtpScreenState extends State<OtpScreen> {
     try {
       final value = widget.identifier.trim();
 
-      final http.Response response;
+      // ───────────── SIGNUP ─────────────
       if (widget.fromSignup) {
-        response = await http
+        final response = await http
             .post(
-          Uri.parse(_signupVerifyUrl),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            if (value.contains('@')) 'email': value else 'phone': value,
-            'otp': otp,
-          }),
+          Uri.parse(widget.isAgent ? _agentVerifyUrl : _signupVerifyUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({'registrationId': _registrationId, 'otp': otp}),
         )
-            .timeout(const Duration(seconds: 20));
-      } else {
-        // {phone, userId, otp}
-        response = await http
-            .post(
-          Uri.parse(_forgotVerifyUrl),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'phone': value,
-            'userId': widget.userId,
-            'otp': otp,
-          }),
-        )
-            .timeout(const Duration(seconds: 20));
+            .timeout(const Duration(seconds: 90));
+
+        debugPrint('SIGNUP VERIFY status: ${response.statusCode}');
+        debugPrint('SIGNUP VERIFY body: ${response.body}');
+
+        final body = _decode(response);
+        if (!mounted) return;
+
+        if (!_isOk(response, body)) {
+          setState(
+                  () => _error = _messageOf(body) ?? 'Invalid or expired code');
+          return;
+        }
+
+        if (widget.isAgent) {
+          final d = _asMap(body?['data']);
+          _timer?.cancel();
+          _showMessage((d['message'] ??
+              body?['message'] ??
+              'Registration submitted. Your account will be active once the admin activates it.')
+              .toString());
+          Navigator.of(context).popUntil((r) => r.isFirst);
+          return;
+        }
+
+        final data = _asMap(body?['data']);
+        final company = _asMap(data['company']);
+        final companyId = (company['id'] ?? '').toString();
+        final activationToken = (data['activationToken'] ?? '').toString();
+
+        if (companyId.isEmpty || activationToken.isEmpty) {
+          setState(() =>
+          _error = 'Verified, but activation details are missing. Please contact support.');
+          return;
+        }
+
+        _timer?.cancel();
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => ActivationPaymentScreen(
+              companyId: companyId,
+              companyName: (company['companyName'] ?? '').toString(),
+              activationToken: activationToken,
+              activationFee: _int(data['activationFee'], 100),
+              contactPhone: value,
+            ),
+          ),
+        );
+        return;
       }
+
+      // ───────────── FORGOT PASSWORD ─────────────
+      final response = await http
+          .post(
+        Uri.parse(_forgotVerifyUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'phone': value,
+          'userId': widget.userId,
+          'otp': otp,
+        }),
+      )
+          .timeout(const Duration(seconds: 20));
 
       final body = _decode(response);
       if (!mounted) return;
@@ -216,16 +283,7 @@ class _OtpScreenState extends State<OtpScreen> {
         return;
       }
 
-      if (widget.fromSignup) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-              (route) => false,
-        );
-        return;
-      }
-
-      // Forgot-password: data.resetToken aage New Password screen ko chahiye
-      final data = body?['data'] is Map ? body!['data'] as Map : const {};
+      final data = _asMap(body?['data']);
       final resetToken = (data['resetToken'] ?? '').toString();
       final userId = (data['userId'] ?? widget.userId).toString();
 
@@ -234,8 +292,6 @@ class _OtpScreenState extends State<OtpScreen> {
         return;
       }
 
-      // final token = SharedPreferenceService.getToken();
-      // if (!context.mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -245,8 +301,21 @@ class _OtpScreenState extends State<OtpScreen> {
           ),
         ),
       );
-    } catch (_) {
-      if (mounted) setState(() => _error = 'Network error. Please try again.');
+    } on TimeoutException {
+      debugPrint('VERIFY error: timeout');
+      if (mounted) {
+        setState(() => _error =
+        'Server is taking too long. Your registration may already be submitted. '
+            'Please wait a minute and check before trying again.');
+      }
+    } on SocketException catch (e) {
+      debugPrint('VERIFY error: SocketException $e');
+      if (mounted) {
+        setState(() => _error = 'No internet connection. Please check and try again.');
+      }
+    } catch (e, st) {
+      debugPrint('VERIFY error: $e\n$st');
+      if (mounted) setState(() => _error = 'Something went wrong (${e.runtimeType}).');
     } finally {
       if (mounted) setState(() => _isVerifying = false);
     }
@@ -264,15 +333,12 @@ class _OtpScreenState extends State<OtpScreen> {
       if (widget.fromSignup) {
         response = await http
             .post(
-          Uri.parse(_signupResendUrl),
+          Uri.parse(widget.isAgent ? _agentResendUrl : _signupResendUrl),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(
-            value.contains('@') ? {'email': value} : {'phone': value},
-          ),
+          body: jsonEncode({'registrationId': _registrationId}),
         )
             .timeout(const Duration(seconds: 20));
       } else {
-        // send-otp: {phone, userId}
         response = await http
             .post(
           Uri.parse(_forgotSendUrl),
@@ -282,11 +348,21 @@ class _OtpScreenState extends State<OtpScreen> {
             .timeout(const Duration(seconds: 20));
       }
 
+      debugPrint('RESEND status: ${response.statusCode}');
+      debugPrint('RESEND body: ${response.body}');
+
       final body = _decode(response);
       if (!mounted) return;
 
       if (_isOk(response, body)) {
-        final data = body?['data'] is Map ? body!['data'] as Map : const {};
+        final data = _asMap(body?['data']);
+
+        // Server naya registrationId de to usi se aage verify karna hai
+        final newRegId = data['registrationId']?.toString() ?? '';
+        if (widget.fromSignup && newRegId.isNotEmpty) {
+          _registrationId = newRegId;
+        }
+
         _clearBoxes();
         setState(() {
           _error = null;

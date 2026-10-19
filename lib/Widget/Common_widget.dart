@@ -183,7 +183,7 @@ class PrimaryButton extends StatelessWidget {
   }
 }
 
-/// Dark hero header used at the top of auth screens matching `.auth-hero`.
+/// Dark hero header used at the top of Auth screens matching `.Auth-hero`.
 class AuthHero extends StatelessWidget {
   const AuthHero({
     super.key,

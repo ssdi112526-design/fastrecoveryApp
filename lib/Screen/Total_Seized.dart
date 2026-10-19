@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'Confimation_cases/ConfirmedCases.dart';
-import 'Confimation_cases/Update_inverntory.dart';
+import 'Confimation_cases/update_inventory.dart';
 
 const String _kBase = 'https://fastrecovery.in/api';
 
