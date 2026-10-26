@@ -3,7 +3,7 @@ description: "FastRecovery - app for authorized vehicle recovery agents."
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.0+1
+version: 1.0.0+8
 
 environment:
   sdk: ^3.12.2
@@ -37,7 +37,6 @@ dependencies:
   excel_plus: ^2.27.1
   pdf: ^3.13.1
   video_player: ^2.14.1
-  razorpay_flutter: ^1.4.0
 
 
 #  firebase_core: ^4.15.0
@@ -59,10 +58,12 @@ flutter:
 
 flutter_launcher_icons:
   android: true
-  ios: true
+  ios: false
+  remove_alpha_ios: true
   image_path: "assets/images/fastrecoverylogo.png"
   adaptive_icon_background: "#f2f3f4"
   adaptive_icon_foreground: "assets/images/fastrecoverylogo.png"
+  adaptive_icon_foreground_inset: 8
 
 
   fonts:

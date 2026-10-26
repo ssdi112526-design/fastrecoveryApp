@@ -120,7 +120,7 @@ class ContactSupportPage extends StatelessWidget {
           onPressed: () => _backToLogin(context),
         ),
         title: Text(
-          'Contact Support',
+          'Contact Us',
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w800,

@@ -306,7 +306,6 @@ class _AgentRegisterScreenState extends State<AgentRegisterScreen> {
           MaterialPageRoute(
             builder: (_) => OtpScreen(
               fromSignup: true,
-              isAgent: true,
               registrationId: data['registrationId']?.toString() ?? '',
               identifier: data['phone']?.toString() ?? _mobileC.text.trim(),
               maskedPhone: data['maskedPhone']?.toString() ?? '',

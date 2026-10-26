@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import '../Screen/Activation_Payment_Screen.dart';
 import '../Widget/Common_widget.dart';
 import '../theme/app_theme.dart';
 import 'New_password_screen.dart';
@@ -15,14 +14,13 @@ class OtpScreen extends StatefulWidget {
     required this.fromSignup,
     this.identifier = '', // mobile number jis par OTP gaya
     this.userId = '', // forgot-password: select kiye hue account ki id
-    this.registrationId = '', // signup: register API se aaya
+    this.registrationId = '', // agent signup: register API se aaya
     this.maskedPhone = '', // API se aaya: ********2589
     this.expiresInSeconds = 600,
     this.resendAfterSeconds = 60,
-    this.isAgent = false, // true: agent self-registration OTP
   });
 
-  /// true  → company signup verify → Activation payment
+  /// true  → agent self-registration verify
   /// false → forgot-password → New Password
   final bool fromSignup;
   final String identifier;
@@ -31,7 +29,6 @@ class OtpScreen extends StatefulWidget {
   final String maskedPhone;
   final int expiresInSeconds;
   final int resendAfterSeconds;
-  final bool isAgent;
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -43,15 +40,6 @@ class _OtpScreenState extends State<OtpScreen> {
       'https://fastrecovery.in/api/Auth/forgot-password/verify-otp';
   static const String _forgotSendUrl =
       'https://fastrecovery.in/api/Auth/forgot-password/send-otp';
-
-  // ── Company signup APIs ──
-  static const String _signupVerifyUrl =
-      'https://fastrecovery.in/api/companies/register/verify-otp';
-
-  // TODO: web pe "Resend" dabake Network tab se is URL ko confirm karo.
-  // (Ye guess hai, verify-otp wale pattern par bana hai.)
-  static const String _signupResendUrl =
-      'https://fastrecovery.in/api/companies/register/resend-otp';
 
   // ── Agent self-registration APIs ──
   // TODO: web pe agent registration ka OTP dalte waqt Network tab se dono URL
@@ -200,11 +188,11 @@ class _OtpScreenState extends State<OtpScreen> {
     try {
       final value = widget.identifier.trim();
 
-      // ───────────── SIGNUP ─────────────
+      // ───────────── AGENT SIGNUP ─────────────
       if (widget.fromSignup) {
         final response = await http
             .post(
-          Uri.parse(widget.isAgent ? _agentVerifyUrl : _signupVerifyUrl),
+          Uri.parse(_agentVerifyUrl),
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -213,8 +201,8 @@ class _OtpScreenState extends State<OtpScreen> {
         )
             .timeout(const Duration(seconds: 90));
 
-        debugPrint('SIGNUP VERIFY status: ${response.statusCode}');
-        debugPrint('SIGNUP VERIFY body: ${response.body}');
+        debugPrint('AGENT VERIFY status: ${response.statusCode}');
+        debugPrint('AGENT VERIFY body: ${response.body}');
 
         final body = _decode(response);
         if (!mounted) return;
@@ -225,40 +213,13 @@ class _OtpScreenState extends State<OtpScreen> {
           return;
         }
 
-        if (widget.isAgent) {
-          final d = _asMap(body?['data']);
-          _timer?.cancel();
-          _showMessage((d['message'] ??
-              body?['message'] ??
-              'Registration submitted. Your account will be active once the admin activates it.')
-              .toString());
-          Navigator.of(context).popUntil((r) => r.isFirst);
-          return;
-        }
-
-        final data = _asMap(body?['data']);
-        final company = _asMap(data['company']);
-        final companyId = (company['id'] ?? '').toString();
-        final activationToken = (data['activationToken'] ?? '').toString();
-
-        if (companyId.isEmpty || activationToken.isEmpty) {
-          setState(() =>
-          _error = 'Verified, but activation details are missing. Please contact support.');
-          return;
-        }
-
+        final d = _asMap(body?['data']);
         _timer?.cancel();
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => ActivationPaymentScreen(
-              companyId: companyId,
-              companyName: (company['companyName'] ?? '').toString(),
-              activationToken: activationToken,
-              activationFee: _int(data['activationFee'], 100),
-              contactPhone: value,
-            ),
-          ),
-        );
+        _showMessage((d['message'] ??
+            body?['message'] ??
+            'Registration submitted. Your account will be active once the admin activates it.')
+            .toString());
+        Navigator.of(context).popUntil((r) => r.isFirst);
         return;
       }
 
@@ -311,11 +272,14 @@ class _OtpScreenState extends State<OtpScreen> {
     } on SocketException catch (e) {
       debugPrint('VERIFY error: SocketException $e');
       if (mounted) {
-        setState(() => _error = 'No internet connection. Please check and try again.');
+        setState(() =>
+        _error = 'No internet connection. Please check and try again.');
       }
     } catch (e, st) {
       debugPrint('VERIFY error: $e\n$st');
-      if (mounted) setState(() => _error = 'Something went wrong (${e.runtimeType}).');
+      if (mounted) {
+        setState(() => _error = 'Something went wrong (${e.runtimeType}).');
+      }
     } finally {
       if (mounted) setState(() => _isVerifying = false);
     }
@@ -333,7 +297,7 @@ class _OtpScreenState extends State<OtpScreen> {
       if (widget.fromSignup) {
         response = await http
             .post(
-          Uri.parse(widget.isAgent ? _agentResendUrl : _signupResendUrl),
+          Uri.parse(_agentResendUrl),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'registrationId': _registrationId}),
         )

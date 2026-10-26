@@ -57,16 +57,16 @@ class GetStartedScreenBody extends StatelessWidget {
             ).copyWith(height: 1.5),
           ),
           const SizedBox(height: 28),
-          _OptionCard(
-            icon: Icons.work_outline_rounded,
-            title: 'Register a new company',
-            description:
-            'Create your repo company and admin account. Status stays pending until payment is confirmed and SSDI activates you.',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SignupScreen()),
-            ),
-          ),
-          const SizedBox(height: 16),
+          // _OptionCard(
+          //   icon: Icons.work_outline_rounded,
+          //   title: 'Register a new company',
+          //   description:
+          //   'Create your repo company and admin account. Status stays pending until payment is confirmed and SSDI activates you.',
+          //   onTap: () => Navigator.of(context).push(
+          //     MaterialPageRoute(builder: (_) => const SignupScreen()),
+          //   ),
+          // ),
+          // const SizedBox(height: 16),
           _OptionCard(
             icon: Icons.person_add_alt_1_outlined,
             title: 'Join as repo user / agent',

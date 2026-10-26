@@ -294,12 +294,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 subtitle: 'Rules of using the app',
                 onTap: () => _open(_Links.terms),
               ),
-               _Tile(
+              _Tile(
                 icon: Icons.policy,
                 color: const Color(0xff0D9488),
                 title: 'Privacy Policy',
-                subtitle: 'Rules of using the app',
-                onTap: () =>  _push( const PrivacyPolicyScreen()),
+                subtitle: 'How we collect and use your data',
+                onTap: () => _open(_Links.privacyPolicy),
               ),
 
               _Tile(
