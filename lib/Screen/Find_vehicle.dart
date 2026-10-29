@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../Service/SharedPreferenceService.dart';
 import '../auth/login/login_page.dart';
 import '../Model_class/profile_model.dart';
 import '../Model_class/vehicle_detail_model.dart';
@@ -13,6 +14,7 @@ import '../Service/Offline_sync_service.dart';
 import '../Widget/Offline_sync_card.dart';
 import '../db_helper/Offline_DB_helper.dart';
 import '../theme/app_theme.dart';
+import 'Repo_payment.dart';
 import 'dashboard.dart';
 import 'ID_card.dart';
 import 'Profile_page.dart';
@@ -817,20 +819,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDrawer() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final background =
-    isDark ? const Color(0xff0A1220) : const Color(0xffF8FAFC);
+    final background = isDark ? const Color(0xff0A1220) : const Color(0xffF8FAFC);
     final primaryText = isDark ? Colors.white : const Color(0xff0F172A);
-    final secondaryText =
-    isDark ? const Color(0xff8F9DB5) : const Color(0xff64748B);
-
-    // Find Vehicle yahi screen hai, isliye menu mein nahi.
+    final secondaryText = isDark ? const Color(0xff8F9DB5) : const Color(0xff64748B);
 
     final drawerItems = [
       (icon: Icons.dashboard_rounded, title: 'Dashboard'),
       (icon: Icons.badge_rounded, title: 'ID Card'),
       (icon: Icons.person_rounded, title: 'Profile'),
-      // (icon: Icons.car_crash_rounded, title: 'Total Seized Vehicle'),
+       (icon: Icons.payment, title: 'Repo Payment'),
       (icon: Icons.settings_rounded, title: 'Setting'),
     ];
 
@@ -979,6 +976,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               );
                               break;
+
+                            case 'Repo Payment':
+                              final token = SharedPreferenceService.getToken();
+                              Navigator.push(context, MaterialPageRoute(
+                              builder: (_) => RepoPaymentPage(
+                                  token: token),
+                            ),);
+                              break;
+
                             case 'Total Seized Vehicle':
                               Navigator.of(context).push(
                                 MaterialPageRoute(

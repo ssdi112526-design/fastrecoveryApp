@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../Model_class/profile_model.dart';
 import '../Service/Location_tracking_permission.dart';
+import 'Cancel_confirmation.dart';
 import 'Confimation_cases/ConfirmedCases.dart';
 import 'Pending_confirmed.dart';
 import 'Total_Seized.dart';
@@ -48,6 +49,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   int _companyTotalRecords =0;
   int _inventoryConfirmed = 0;
   int _confirmedConfirmations = 0;
+  int _cancelConfirmations = 0;
 
   late final AnimationController _pageAnimationController;
   late final Animation<double> _fadeAnimation;
@@ -277,12 +279,14 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       _fetchStat('/api/confirmations/stats/inventory-confirmed-count', headers),
       _fetchStat('/api/confirmations/stats/count', headers),
       _fetchStat('/api/repo-cases/stats/linked-upload-agencies', headers),
+      _fetchStat('/api/confirmations?status=REJECTED&page=1&limit=1', headers),
     ]);
 
     final pending = results[0];
     final inventory = results[1];
     final count = results[2];
     final records = results[3];
+    final REJECTED = results[4];
 
     if (!mounted) return;
     setState(() {
@@ -873,13 +877,26 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       }
 
   Widget _buildSeizedCard(bool isDark) {
-    return _infoCard(
-      isDark: isDark,
-      icon: Icons.car_crash_rounded,
-      label: 'Total Seized',
-      subtitle: 'Seized',
-      value: _statsLoading ? 0 : _inventoryConfirmed,
-      onTap: () => _goTo(const SeizedSuccessfullyScreen()),
+    return _cardRow(
+      _infoCard(
+        isDark: isDark,
+        icon: Icons.car_crash_rounded,
+        label: 'Total Seized',
+        subtitle: 'Seized',
+        value: _statsLoading ? 0 : _inventoryConfirmed,
+        onTap: () => _goTo(const SeizedSuccessfullyScreen()),
+      ),
+      _infoCard(
+        isDark: isDark,
+        icon: Icons.cancel_rounded,
+        label: 'Cancel Confirmation',
+        subtitle: 'Cancelled',
+        value: _statsLoading ? 0 : _cancelConfirmations,
+        onTap: () {
+          final token = SharedPreferenceService.getToken();
+          _goTo(CancelConfirmationsScreen(token: token), refreshOnReturn: true);
+        },
+      ),
     );
   }
 
