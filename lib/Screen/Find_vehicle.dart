@@ -18,7 +18,7 @@ import 'Repo_payment.dart';
 import 'dashboard.dart';
 import 'ID_card.dart';
 import 'Profile_page.dart';
-import 'Total_Seized.dart';
+import 'Seized_vehicle_pages/Total_Seized.dart';
 import 'Vehicle_Details.dart';
 
 class HomeScreen extends StatefulWidget {

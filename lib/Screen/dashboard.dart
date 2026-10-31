@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:fastrecovery/Screen/Confimation_cases/update_inventory.dart'hide ConfirmedCases;
+import 'package:fastrecovery/Screen/Seized_vehicle_pages/Seized_update_inventory.dart'hide ConfirmedCases;
 import 'package:fastrecovery/Service/SharedPreferenceService.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -12,7 +12,7 @@ import '../Service/Location_tracking_permission.dart';
 import 'Cancel_confirmation.dart';
 import 'Confimation_cases/ConfirmedCases.dart';
 import 'Pending_confirmed.dart';
-import 'Total_Seized.dart';
+import 'Seized_vehicle_pages/Total_Seized.dart';
 
 // =============================================================
 // AGENCY DASHBOARD
@@ -248,6 +248,32 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     return profile.user;
   }
 
+  /// Cancel (REJECTED) ka total count — pagination.total se
+  Future<int?> _fetchCancelCount(Map<String, String> headers) async {
+    try {
+      final res = await http
+          .get(
+        Uri.parse('$_baseUrl/api/confirmations?status=REJECTED&page=1&limit=1'),
+        headers: headers,
+      )
+          .timeout(const Duration(seconds: 20));
+
+      debugPrint('[DASHBOARD STATS] cancel -> ${res.statusCode} | ${res.body}');
+
+      if (res.statusCode < 200 || res.statusCode >= 300) return null;
+
+      final body = jsonDecode(res.body);
+      if (body is Map && body['success'] == true) {
+        final pg = body['pagination'];
+        if (pg is Map && pg['total'] != null) return _toInt(pg['total']);
+        if (body['data'] is List) return (body['data'] as List).length;
+      }
+    } catch (e) {
+      debugPrint('[DASHBOARD STATS] cancel ERROR: $e');
+    }
+    return null;
+  }
+
   // ── Stats ────────────────────────────────────────────────
 
   /// Ek stats endpoint. Fail hone par null — baaki cards par asar nahi.
@@ -274,23 +300,22 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     return null;
   }
   Future<void> _loadStats(Map<String, String> headers) async {
-    final results = await Future.wait([
+    final results = await Future.wait<Object?>([
       _fetchStat('/api/confirmations/stats/pending-count', headers),
       _fetchStat('/api/confirmations/stats/inventory-confirmed-count', headers),
       _fetchStat('/api/confirmations/stats/count', headers),
       _fetchStat('/api/repo-cases/stats/linked-upload-agencies', headers),
-      _fetchStat('/api/confirmations?status=REJECTED&page=1&limit=1', headers),
+      _fetchCancelCount(headers), // <- yahan change
     ]);
 
-    final pending = results[0];
-    final inventory = results[1];
-    final count = results[2];
-    final records = results[3];
-    final REJECTED = results[4];
+    final pending = results[0] as Map<String, dynamic>?;
+    final inventory = results[1] as Map<String, dynamic>?;
+    final count = results[2] as Map<String, dynamic>?;
+    final records = results[3] as Map<String, dynamic>?;
+    final cancel = results[4] as int?;
 
     if (!mounted) return;
     setState(() {
-      // Fail hone par purani value rakho
       if (pending != null) {
         _pendingConfirmations = _toInt(pending['pendingConfirmations']);
       }
@@ -307,6 +332,9 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       }
       if (records != null) {
         _companyTotalRecords = _toInt(records['companyTotalRecords']);
+      }
+      if (cancel != null) {
+        _cancelConfirmations = cancel; // <- naya
       }
       _statsLoading = false;
     });

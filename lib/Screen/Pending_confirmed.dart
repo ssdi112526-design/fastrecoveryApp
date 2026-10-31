@@ -1,45 +1,41 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:excel_plus/excel_plus.dart' as xl;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../theme/app_theme.dart';
 
 // =============================================================
-// MODELS
+// MODEL
 // =============================================================
 
 class _ConfirmationItem {
   final String id;
   final String status;
-  final String caseCode;
   final String vehicleNumber;
   final String customerName;
-  final String bankName;
-  final String branchName;
-  final String requestedByName;
-  final String requestedByRoleLabel;
-  final String requestedByPhone;
-  final String shareChannel;
-  final String traceMode;
   final String requestNote;
+  final String loadedShort;
+  final String loadedDetail;
+  final String caseCode;
+  final String bankName;
   final DateTime? createdAt;
 
   const _ConfirmationItem({
     required this.id,
     required this.status,
-    required this.caseCode,
     required this.vehicleNumber,
     required this.customerName,
-    required this.bankName,
-    required this.branchName,
-    required this.requestedByName,
-    required this.requestedByRoleLabel,
-    required this.requestedByPhone,
-    required this.shareChannel,
-    required this.traceMode,
     required this.requestNote,
+    required this.loadedShort,
+    required this.loadedDetail,
+    required this.caseCode,
+    required this.bankName,
     required this.createdAt,
   });
 
@@ -49,34 +45,38 @@ class _ConfirmationItem {
     return _ConfirmationItem(
       id: _s(j['_id']),
       status: _s(j['status']),
-      caseCode: _s(j['caseCode']),
       vehicleNumber: _s(j['vehicleNumber']),
-      customerName: _s(j['customerName']),
-      bankName: _s(j['bankName']),
-      branchName: _s(j['branchName']),
-      requestedByName: _s(j['requestedByName']),
-      requestedByRoleLabel: _s(j['requestedByRoleLabel']),
-      requestedByPhone: _s(j['requestedByPhone']),
-      shareChannel: _s(j['shareChannel']).toLowerCase(),
-      traceMode: _s(j['traceMode']),
+      customerName: _s(j['customerName']).replaceAll(RegExp(r'\s+'), ' '),
       requestNote: _s(j['requestNote']),
+      loadedShort: _s(j['loadedShort']),
+      loadedDetail: _s(j['loadedDetail']),
+      caseCode: _s(j['caseCode']),
+      bankName: _s(j['bankName']),
       createdAt: DateTime.tryParse(_s(j['createdAt']))?.toLocal(),
     );
   }
+
+  /// Loaded short + detail ek text mein
+  String get loadedText =>
+      [loadedShort, loadedDetail].where((e) => e.isNotEmpty).join('\n');
+
+  String get searchBlob => [
+    vehicleNumber,
+    customerName,
+    status,
+    requestNote,
+    loadedShort,
+    loadedDetail,
+    caseCode,
+    bankName,
+  ].join(' ').toLowerCase().replaceAll(' ', '');
 }
 
-class _VehicleGroup {
-  final String key;
-  final String vehicleNumber;
+class _PageResult {
   final List<_ConfirmationItem> items;
-
-  _VehicleGroup({
-    required this.key,
-    required this.vehicleNumber,
-    required this.items,
-  });
-
-  _ConfirmationItem? get first => items.isEmpty ? null : items.first;
+  final bool hasNext;
+  final int? total;
+  const _PageResult(this.items, this.hasNext, this.total);
 }
 
 // =============================================================
@@ -98,18 +98,19 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
   final ScrollController _scroll = ScrollController();
   final TextEditingController _searchCtrl = TextEditingController();
 
-  // key -> group (insertion order maintain hota hai)
-  final Map<String, _VehicleGroup> _groupMap = {};
-  final Set<String> _expanded = {};
+  // id -> item (insertion order maintain hota hai)
+  final Map<String, _ConfirmationItem> _map = {};
 
   bool _loading = true;
   bool _loadingMore = false;
+  bool _downloading = false;
   bool _hasNext = false;
   String? _error;
   int _page = 1;
-  int _vehicleTotal = 0;
-  int _requestTotal = 0;
+  int _total = 0;
   String _query = '';
+
+  List<_ConfirmationItem> get _all => _map.values.toList();
 
   @override
   void initState() {
@@ -138,6 +139,62 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
     }
   }
 
+  Future<_PageResult> _fetchPage(int page) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = (prefs.getString('token') ?? '').trim();
+    if (token.isEmpty) throw Exception('Session expired');
+
+    final uri = Uri.parse('$_baseUrl/api/confirmations').replace(
+      queryParameters: {
+        'status': 'PENDING',
+        'page': '$page',
+        'limit': '$_limit',
+        'groupBy': 'vehicle',
+      },
+    );
+
+    final res = await http.get(uri, headers: {
+      'Accept': 'application/json',
+      'Authorization': 'Bearer $token',
+    }).timeout(const Duration(seconds: 20));
+
+    if (res.statusCode == 401) throw Exception('Session expired');
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('Server error (${res.statusCode})');
+    }
+
+    final body = jsonDecode(res.body);
+    if (body is! Map || body['success'] != true) {
+      throw Exception('Invalid response');
+    }
+
+    final items = <_ConfirmationItem>[];
+    final rawData = body['data'];
+    if (rawData is List) {
+      for (final e in rawData) {
+        if (e is Map) {
+          final item =
+          _ConfirmationItem.fromJson(Map<String, dynamic>.from(e));
+          if (item.id.isNotEmpty) items.add(item);
+        }
+      }
+    }
+
+    final pg = body['pagination'];
+    final hasNext = pg is Map && pg['hasNextPage'] == true;
+
+    int? total;
+    final rt = body['requestTotal'];
+    if (rt != null) {
+      total = rt is int ? rt : int.tryParse(rt.toString());
+    } else if (pg is Map && pg['total'] != null) {
+      final t = pg['total'];
+      total = t is int ? t : int.tryParse(t.toString());
+    }
+
+    return _PageResult(items, hasNext, total);
+  }
+
   Future<void> _load({required bool reset}) async {
     if (reset) {
       setState(() {
@@ -150,113 +207,16 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
     }
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = (prefs.getString('token') ?? '').trim();
-      if (token.isEmpty) throw Exception('Session expired');
-
-      final uri = Uri.parse('$_baseUrl/api/confirmations').replace(
-        queryParameters: {
-          'status': 'PENDING',
-          'page': '$_page',
-          'limit': '$_limit',
-          'groupBy': 'vehicle',
-        },
-      );
-
-      final res = await http.get(uri, headers: {
-        'Accept': 'application/json',
-        'Authorization': 'Bearer $token',
-      }).timeout(const Duration(seconds: 20));
-
-      if (res.statusCode == 401) throw Exception('Session expired');
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        throw Exception('Server error (${res.statusCode})');
-      }
-
-      final body = jsonDecode(res.body);
-      if (body is! Map || body['success'] != true) {
-        throw Exception('Invalid response');
-      }
-
-      // 1) flat items: id -> item
-      final byId = <String, _ConfirmationItem>{};
-      final rawData = body['data'];
-      if (rawData is List) {
-        for (final e in rawData) {
-          if (e is Map) {
-            final item =
-            _ConfirmationItem.fromJson(Map<String, dynamic>.from(e));
-            if (item.id.isNotEmpty) byId[item.id] = item;
-          }
-        }
-      }
-
-      // 2) groups (server ne vehicle ke hisaab se diye)
-      final newGroups = <String, _VehicleGroup>{};
-      final rawGroups = body['groups'];
-      if (rawGroups is List && rawGroups.isNotEmpty) {
-        for (final g in rawGroups) {
-          if (g is! Map) continue;
-          final ids = (g['confirmationIds'] is List)
-              ? (g['confirmationIds'] as List).map((e) => e.toString())
-              : <String>[];
-          final items = ids
-              .map((id) => byId[id])
-              .whereType<_ConfirmationItem>()
-              .toList();
-          if (items.isEmpty) continue;
-
-          final vehicle = (g['vehicleNumber'] ?? items.first.vehicleNumber)
-              .toString();
-          final key = (g['vehicleKey'] ?? 'v:$vehicle').toString();
-          newGroups[key] = _VehicleGroup(
-            key: key,
-            vehicleNumber: vehicle,
-            items: items,
-          );
-        }
-      } else {
-        // fallback: khud vehicle number se group karo
-        for (final item in byId.values) {
-          final key = 'v:${item.vehicleNumber}';
-          newGroups
-              .putIfAbsent(
-            key,
-                () => _VehicleGroup(
-              key: key,
-              vehicleNumber: item.vehicleNumber,
-              items: [],
-            ),
-          )
-              .items
-              .add(item);
-        }
-      }
-
-      final pagination = body['pagination'];
-      final hasNext = pagination is Map && pagination['hasNextPage'] == true;
-
+      final r = await _fetchPage(_page);
       if (!mounted) return;
       setState(() {
-        if (reset) _groupMap.clear();
-        newGroups.forEach((key, group) {
-          final old = _groupMap[key];
-          if (old == null) {
-            _groupMap[key] = group;
-          } else {
-            // doosre page par wahi vehicle aaye to merge
-            final ids = old.items.map((e) => e.id).toSet();
-            old.items.addAll(group.items.where((e) => !ids.contains(e.id)));
-          }
-        });
-
-        _vehicleTotal = _toInt(body['vehicleTotal'], _groupMap.length);
-        _requestTotal = _toInt(
-          body['requestTotal'],
-          _groupMap.values.fold<int>(0, (s, g) => s + g.items.length),
-        );
-        _hasNext = hasNext;
-        if (hasNext) _page += 1;
+        if (reset) _map.clear();
+        for (final i in r.items) {
+          _map[i.id] = i;
+        }
+        _total = r.total ?? _map.length;
+        _hasNext = r.hasNext;
+        if (r.hasNext) _page += 1;
         _loading = false;
         _loadingMore = false;
         _error = null;
@@ -267,45 +227,128 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
       setState(() {
         _loading = false;
         _loadingMore = false;
-        // purana data dikh raha ho to full error screen mat dikhao
-        if (_groupMap.isEmpty) {
+        if (_map.isEmpty) {
           _error = e.toString().contains('Session expired')
               ? 'Session expired. Please login again.'
               : 'Unable to load pending confirmations.';
         }
       });
-      if (_groupMap.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Could not refresh. Check your internet.'),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        );
-      }
+      if (_map.isNotEmpty) _snack('Could not refresh. Check your internet.');
     }
   }
 
-  int _toInt(dynamic v, int fallback) {
-    if (v is int) return v;
-    return int.tryParse(v?.toString() ?? '') ?? fallback;
+  // ---------------------------------------------------------
+  // SEARCH
+  // ---------------------------------------------------------
+
+  List<_ConfirmationItem> _applyFilter(List<_ConfirmationItem> src) {
+    final q = _query.toLowerCase().replaceAll(' ', '');
+    if (q.isEmpty) return src;
+    return src.where((e) => e.searchBlob.contains(q)).toList();
   }
 
-  List<_VehicleGroup> get _filtered {
-    final all = _groupMap.values.toList();
-    final q = _query.trim().toLowerCase();
-    if (q.isEmpty) return all;
+  int _snoOf(int indexInAll) {
+    final base = _total >= _map.length ? _total : _map.length;
+    return base - indexInAll;
+  }
 
-    return all.where((g) {
-      if (g.vehicleNumber.toLowerCase().contains(q)) return true;
-      return g.items.any((i) =>
-      i.customerName.toLowerCase().contains(q) ||
-          i.caseCode.toLowerCase().contains(q) ||
-          i.bankName.toLowerCase().contains(q));
-    }).toList();
+  // ---------------------------------------------------------
+  // EXCEL
+  // ---------------------------------------------------------
+
+  Future<void> _downloadExcel() async {
+    if (_downloading) return;
+    setState(() => _downloading = true);
+    try {
+      // Saare pages fetch karo (sirf wahi nahi jo screen par load hue)
+      final all = <_ConfirmationItem>[];
+      final seen = <String>{};
+      int page = 1;
+      while (true) {
+        final r = await _fetchPage(page);
+        for (final i in r.items) {
+          if (seen.add(i.id)) all.add(i);
+        }
+        if (!r.hasNext || r.items.isEmpty) break;
+        page++;
+      }
+
+      final total = all.length;
+      final rows = <MapEntry<int, _ConfirmationItem>>[];
+      for (int i = 0; i < all.length; i++) {
+        rows.add(MapEntry(total - i, all[i]));
+      }
+      final q = _query.toLowerCase().replaceAll(' ', '');
+      final filtered = q.isEmpty
+          ? rows
+          : rows.where((e) => e.value.searchBlob.contains(q)).toList();
+
+      if (filtered.isEmpty) {
+        _snack('Download karne ke liye koi data nahi hai');
+        return;
+      }
+
+      final excel = xl.Excel.createExcel();
+      final sheet = excel['Pending Confirmations'];
+      excel.delete('Sheet1');
+
+      sheet.appendRow([
+        'S.No',
+        'Registration Number',
+        'Customer Name',
+        'Status',
+        'Field Note',
+        'Loaded Details',
+        'Reported At',
+      ].map((h) => xl.TextCellValue(h)).toList());
+
+      for (final e in filtered) {
+        final r = e.value;
+        sheet.appendRow([
+          xl.TextCellValue('${e.key}'),
+          xl.TextCellValue(r.vehicleNumber),
+          xl.TextCellValue(r.customerName),
+          xl.TextCellValue(r.status.isEmpty ? 'PENDING' : r.status),
+          xl.TextCellValue(r.requestNote),
+          xl.TextCellValue(r.loadedText.replaceAll('\n', ' - ')),
+          xl.TextCellValue(r.createdAt == null ? '' : _formatDate(r.createdAt)),
+        ]);
+      }
+
+      final bytes = excel.save();
+      if (bytes == null) throw Exception('Excel file ban nahi payi');
+
+      final dir = await getTemporaryDirectory();
+      final n = DateTime.now();
+      String two(int v) => v.toString().padLeft(2, '0');
+      final stamp =
+          '${n.year}${two(n.month)}${two(n.day)}_${two(n.hour)}${two(n.minute)}${two(n.second)}';
+      final file = File('${dir.path}/pending_confirmations_$stamp.xlsx');
+      await file.writeAsBytes(bytes, flush: true);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Pending Confirmations (${filtered.length} cases)',
+      );
+    } catch (e) {
+      _snack(e.toString().contains('Session expired')
+          ? 'Session expired. Please login again.'
+          : 'Excel error: $e');
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  void _snack(String m) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(m),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
   }
 
   // ---------------------------------------------------------
@@ -313,7 +356,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
   // ---------------------------------------------------------
 
   String _formatDate(DateTime? d) {
-    if (d == null) return '-';
+    if (d == null) return '—';
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -325,37 +368,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
         '${d.year}, $h12:$mm $ap';
   }
 
-  IconData _channelIcon(String c) {
-    switch (c) {
-      case 'whatsapp':
-        return Icons.chat_rounded;
-      case 'sms':
-        return Icons.sms_rounded;
-      case 'email':
-        return Icons.email_rounded;
-      default:
-        return Icons.send_rounded;
-    }
-  }
-
-  Color _channelColor(String c) {
-    switch (c) {
-      case 'whatsapp':
-        return const Color(0xff16A34A);
-      case 'sms':
-        return const Color(0xff2563EB);
-      case 'email':
-        return const Color(0xffF59E0B);
-      default:
-        return const Color(0xff64748B);
-    }
-  }
-
-  String _channelLabel(String c) {
-    if (c.isEmpty) return 'Request';
-    if (c == 'sms') return 'SMS';
-    return c[0].toUpperCase() + c.substring(1);
-  }
+  String _v(String s) => (s.isEmpty || s == '-') ? '—' : s;
 
   // ---------------------------------------------------------
   // BUILD
@@ -374,7 +387,9 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
           child: Column(
             children: [
               _buildTopBar(isDark),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
+              _buildSearchRow(isDark),
+              const SizedBox(height: 14),
               Expanded(child: _buildBody(isDark)),
             ],
           ),
@@ -389,6 +404,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
     final textColor = isDark ? Colors.white : Colors.black;
     final backBg =
     isDark ? Colors.white.withOpacity(.08) : const Color(0xffF3F6FA);
+    final shown = _applyFilter(_all).length;
 
     return Container(
       height: 64,
@@ -416,7 +432,8 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
               child: Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(color: backBg, shape: BoxShape.circle),
+                decoration:
+                BoxDecoration(color: backBg, shape: BoxShape.circle),
                 child: Icon(
                   Icons.arrow_back_ios_new_rounded,
                   size: 20,
@@ -439,17 +456,99 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
               ),
             ),
           ),
-          // IconButton(
-          //   onPressed: _loading ? null : () => _load(reset: true),
-          //   icon: Icon(Icons.refresh_rounded, color: textColor),
-          // ),
+          if (!_loading && _error == null)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xffF59E0B).withOpacity(.14),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                _query.isEmpty ? '$_total cases' : '$shown cases',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xffD97706),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
+  Widget _buildSearchRow(bool isDark) {
+    final textColor = isDark ? Colors.white : const Color(0xff0F172A);
+    final muted = isDark ? const Color(0xff7F8BA4) : const Color(0xff64748B);
+
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            decoration: _cardDecoration(isDark),
+            child: TextField(
+              controller: _searchCtrl,
+              textInputAction: TextInputAction.search,
+              onChanged: (v) => setState(() => _query = v.trim()),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search vehicle, customer, case code',
+                hintStyle: TextStyle(fontSize: 13, color: muted),
+                prefixIcon: Icon(Icons.search_rounded, color: muted),
+                suffixIcon: _searchCtrl.text.isEmpty
+                    ? null
+                    : IconButton(
+                  icon: Icon(Icons.close_rounded, color: muted),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _query = '');
+                  },
+                ),
+                border: InputBorder.none,
+                contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Tooltip(
+          message: 'Download Excel',
+          child: Material(
+            color: _downloading ? Colors.grey.shade400 : const Color(0xff2E7D32),
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: _downloading ? null : _downloadExcel,
+              child: SizedBox(
+                width: 50,
+                height: 50,
+                child: Center(
+                  child: _downloading
+                      ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                      : const Icon(Icons.download_rounded,
+                      color: Colors.white, size: 24),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBody(bool isDark) {
-    if (_loading && _groupMap.isEmpty) {
+    if (_loading && _map.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(
           strokeWidth: 2.5,
@@ -458,7 +557,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
       );
     }
 
-    if (_error != null && _groupMap.isEmpty) {
+    if (_error != null && _map.isEmpty) {
       return _messageView(
         isDark: isDark,
         icon: Icons.error_outline_rounded,
@@ -467,39 +566,35 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
       );
     }
 
-    final groups = _filtered;
+    final all = _all;
+    final filtered = _applyFilter(all);
 
     return RefreshIndicator(
       onRefresh: () => _load(reset: true),
       color: AppColors.blue600,
       backgroundColor: isDark ? const Color(0xff121A2E) : Colors.white,
-      child: ListView(
+      child: filtered.isEmpty
+          ? ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 80),
+          _messageView(
+            isDark: isDark,
+            icon: Icons.inbox_rounded,
+            title: _query.isEmpty
+                ? 'No pending confirmations'
+                : 'No result found',
+          ),
+        ],
+      )
+          : ListView.builder(
         controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 32),
-        children: [
-          _buildSummary(isDark),
-          const SizedBox(height: 14),
-          _buildSearch(isDark),
-          const SizedBox(height: 14),
-          if (groups.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 60),
-              child: _messageView(
-                isDark: isDark,
-                icon: Icons.inbox_rounded,
-                title: _query.isEmpty
-                    ? 'No pending confirmations'
-                    : 'No result found',
-              ),
-            )
-          else
-            ...groups.map((g) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _buildGroupCard(g, isDark),
-            )),
-          if (_loadingMore)
-            const Padding(
+        itemCount: filtered.length + (_loadingMore ? 1 : 0),
+        itemBuilder: (_, i) {
+          if (i >= filtered.length) {
+            return const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Center(
                 child: SizedBox(
@@ -512,8 +607,15 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
                   ),
                 ),
               ),
-            ),
-        ],
+            );
+          }
+          final item = filtered[i];
+          final sno = _snoOf(all.indexOf(item));
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildCard(item, sno, isDark),
+          );
+        },
       ),
     );
   }
@@ -553,120 +655,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
   }
 
   // ---------------------------------------------------------
-  // SUMMARY + SEARCH
-  // ---------------------------------------------------------
-
-  Widget _buildSummary(bool isDark) {
-    return Row(
-      children: [
-        Expanded(
-          child: _summaryTile(
-            isDark: isDark,
-            icon: Icons.directions_car_rounded,
-            label: 'Vehicles',
-            value: _vehicleTotal,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _summaryTile(
-            isDark: isDark,
-            icon: Icons.pending_actions_rounded,
-            label: 'Requests',
-            value: _requestTotal,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _summaryTile({
-    required bool isDark,
-    required IconData icon,
-    required String label,
-    required int value,
-  }) {
-    final textColor = isDark ? Colors.white : const Color(0xff0F172A);
-    final muted = isDark ? const Color(0xff7F8BA4) : const Color(0xff64748B);
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: _cardDecoration(isDark),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.blue600.withOpacity(.11),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: AppColors.blue600, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: muted,
-                ),
-              ),
-              Text(
-                '$value',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: textColor,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearch(bool isDark) {
-    final textColor = isDark ? Colors.white : const Color(0xff0F172A);
-    final muted = isDark ? const Color(0xff7F8BA4) : const Color(0xff64748B);
-
-    return Container(
-      decoration: _cardDecoration(isDark),
-      child: TextField(
-        controller: _searchCtrl,
-        onChanged: (v) => setState(() => _query = v),
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: textColor,
-        ),
-        decoration: InputDecoration(
-          hintText: 'Search vehicle, customer, case code',
-          hintStyle: TextStyle(fontSize: 13, color: muted),
-          prefixIcon: Icon(Icons.search_rounded, color: muted),
-          suffixIcon: _query.isEmpty
-              ? null
-              : IconButton(
-            icon: Icon(Icons.close_rounded, color: muted),
-            onPressed: () {
-              _searchCtrl.clear();
-              setState(() => _query = '');
-            },
-          ),
-          border: InputBorder.none,
-          contentPadding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------
-  // GROUP CARD
+  // CARD
   // ---------------------------------------------------------
 
   BoxDecoration _cardDecoration(bool isDark) {
@@ -686,242 +675,249 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
     );
   }
 
-  Widget _buildGroupCard(_VehicleGroup g, bool isDark) {
+  Widget _buildCard(_ConfirmationItem i, int sno, bool isDark) {
     final textColor = isDark ? Colors.white : const Color(0xff0F172A);
     final muted = isDark ? const Color(0xff7F8BA4) : const Color(0xff64748B);
-    final isOpen = _expanded.contains(g.key);
-    final first = g.first;
+    final divider = isDark ? const Color(0xff24304A) : const Color(0xffE5EAF2);
+    final snoBg = isDark ? Colors.white.withOpacity(.08) : const Color(0xffF1F4F9);
+
+    final status = i.status.isEmpty ? 'PENDING' : i.status.toUpperCase();
 
     return Container(
       decoration: _cardDecoration(isDark),
-      child: Column(
-        children: [
-          // ── Header ──
-          InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () => setState(() {
-              isOpen ? _expanded.remove(g.key) : _expanded.add(g.key);
-            }),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.blue600.withOpacity(.11),
-                      borderRadius: BorderRadius.circular(13),
-                    ),
-                    child: const Icon(
-                      Icons.directions_car_rounded,
-                      color: AppColors.blue600,
-                      size: 21,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // amber accent strip
+            Container(width: 4, color: const Color(0xffF59E0B)),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Header: S.No + Registration + Status
+                    Row(
                       children: [
-                        Text(
-                          g.vehicleNumber,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: .4,
-                            color: textColor,
+                        Container(
+                          constraints: const BoxConstraints(minWidth: 32),
+                          height: 32,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: snoBg,
+                            borderRadius: BorderRadius.circular(9),
                           ),
-                        ),
-                        if (first != null && first.customerName.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            first.customerName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          child: Text(
+                            '$sno',
                             style: TextStyle(
                               fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w900,
                               color: textColor,
                             ),
                           ),
-                        ],
-                        if (first != null) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            [first.bankName, first.branchName]
-                                .where((e) => e.isNotEmpty && e != '-')
-                                .join(' • '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'REGISTRATION NUMBER',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: .5,
+                                  color: muted,
+                                ),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                _v(i.vehicleNumber),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: .8,
+                                  color: textColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xffF59E0B).withOpacity(.14),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            status,
+                            style: const TextStyle(
                               fontSize: 10.5,
-                              fontWeight: FontWeight.w500,
-                              color: muted,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: .4,
+                              color: Color(0xffD97706),
                             ),
                           ),
-                        ],
+                        ),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xffF59E0B).withOpacity(.14),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${g.items.length} ${g.items.length == 1 ? 'request' : 'requests'}',
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xffD97706),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  AnimatedRotation(
-                    turns: isOpen ? .5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: muted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
 
-          // ── Requests list ──
-          AnimatedCrossFade(
-            firstChild: const SizedBox(width: double.infinity),
-            secondChild: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-              child: Column(
-                children: [
-                  Divider(
-                    height: 1,
-                    color: isDark
-                        ? const Color(0xff24304A)
-                        : const Color(0xffE5EAF2),
-                  ),
-                  const SizedBox(height: 10),
-                  ...g.items.map((i) => _buildRequestTile(i, isDark)),
-                ],
-              ),
-            ),
-            crossFadeState:
-            isOpen ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 220),
-          ),
-        ],
-      ),
-    );
-  }
+                    const SizedBox(height: 12),
 
-  Widget _buildRequestTile(_ConfirmationItem i, bool isDark) {
-    final textColor = isDark ? Colors.white : const Color(0xff0F172A);
-    final muted = isDark ? const Color(0xff7F8BA4) : const Color(0xff64748B);
-    final color = _channelColor(i.shareChannel);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withOpacity(.04)
-            : const Color(0xffF8FAFD),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color.withOpacity(.13),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(_channelIcon(i.shareChannel), color: color, size: 17),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${_channelLabel(i.shareChannel)} request',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          color: textColor,
+                    // ── Customer
+                    _label('CUSTOMER NAME', muted),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Icon(Icons.person_outline_rounded,
+                            size: 17, color: muted),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _v(i.customerName),
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: textColor,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xffF59E0B).withOpacity(.14),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        i.status.isEmpty ? 'PENDING' : i.status,
-                        style: const TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xffD97706),
+
+                    const SizedBox(height: 12),
+
+                    // ── Field Note
+                    _noteBox(
+                      title: 'Field Note',
+                      text: _v(i.requestNote),
+                      icon: Icons.sticky_note_2_outlined,
+                      bg: isDark
+                          ? const Color(0xffF59E0B).withOpacity(.10)
+                          : const Color(0xffFFF8E6),
+                      border: isDark
+                          ? const Color(0xffF59E0B).withOpacity(.25)
+                          : const Color(0xffF5DFA3),
+                      textColor: textColor,
+                      muted: muted,
+                    ),
+                    const SizedBox(height: 8),
+
+                    // ── Loaded Details
+                    _noteBox(
+                      title: 'Loaded Details',
+                      text: i.loadedText.isEmpty ? '—' : i.loadedText,
+                      icon: Icons.local_shipping_outlined,
+                      bg: isDark
+                          ? const Color(0xff16A34A).withOpacity(.10)
+                          : const Color(0xffEFF8F0),
+                      border: isDark
+                          ? const Color(0xff16A34A).withOpacity(.25)
+                          : const Color(0xffC5E3C8),
+                      textColor: textColor,
+                      muted: muted,
+                    ),
+
+                    const SizedBox(height: 12),
+                    Divider(height: 1, color: divider),
+                    const SizedBox(height: 10),
+
+                    // ── Reported At
+                    Row(
+                      children: [
+                        Icon(Icons.schedule_rounded, size: 14, color: muted),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Reported At',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: muted,
+                          ),
                         ),
-                      ),
+                        const Spacer(),
+                        Text(
+                          _formatDate(i.createdAt),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: textColor,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                _line(Icons.person_rounded,
-                    '${i.requestedByName}'
-                        '${i.requestedByRoleLabel.isNotEmpty ? ' (${i.requestedByRoleLabel})' : ''}',
-                    muted),
-                if (i.requestedByPhone.isNotEmpty)
-                  _line(Icons.phone_rounded, i.requestedByPhone, muted),
-                if (i.caseCode.isNotEmpty)
-                  _line(Icons.tag_rounded, i.caseCode, muted),
-                _line(Icons.schedule_rounded, _formatDate(i.createdAt), muted),
-                if (i.requestNote.isNotEmpty)
-                  _line(Icons.notes_rounded, i.requestNote, muted),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _line(IconData icon, String text, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 3),
-      child: Row(
+  Widget _label(String text, Color color) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 9,
+        fontWeight: FontWeight.w800,
+        letterSpacing: .5,
+        color: color,
+      ),
+    );
+  }
+
+  Widget _noteBox({
+    required String title,
+    required String text,
+    required IconData icon,
+    required Color bg,
+    required Color border,
+    required Color textColor,
+    required Color muted,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              text,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: color,
+          Row(
+            children: [
+              Icon(icon, size: 14, color: muted),
+              const SizedBox(width: 5),
+              Text(
+                title.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .5,
+                  color: muted,
+                ),
               ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 13.5,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+              color: textColor,
             ),
           ),
         ],

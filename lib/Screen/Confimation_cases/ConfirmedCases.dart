@@ -1449,6 +1449,12 @@ class InventoryConfirmedPage extends StatelessWidget {
   );
 }
 
+// =============================================================
+// Is poori class ko apni file mein purani `_CaseCard` class se replace karo
+// (class _CaseCard extends StatelessWidget { ... } — jahan se jahan tak hai).
+// Baaki sab kuch (imports, helpers, list page, detail page) waisa hi rahega.
+// =============================================================
+
 class _CaseCard extends StatelessWidget {
   final Map<String, dynamic> item;
   final int sNo;
@@ -1462,74 +1468,83 @@ class _CaseCard extends StatelessWidget {
         required this.onTap,
         this.inventoryMode = false});
 
-  Widget _inventorySummary() {
-    int n(String k) => (item[k] as List? ?? []).length;
-    final yard = _str(item['parkingYardName']);
+  String _v(String s) => (s.isEmpty || s == '-') ? '—' : s;
 
-    Widget chip(IconData i, String t) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+  Widget _label(String t) => Text(t,
+      style: TextStyle(
+          color: c.muted,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: .5));
+
+  Widget _noteBox({
+    required String title,
+    required String text,
+    required IconData icon,
+    required Color bg,
+    required Color border,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: c.tile,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: c.border),
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(i, size: 13, color: _blue),
-          const SizedBox(width: 5),
-          Text(t,
+          Row(
+            children: [
+              Icon(icon, size: 14, color: c.muted),
+              const SizedBox(width: 5),
+              Text(title.toUpperCase(),
+                  style: TextStyle(
+                      color: c.muted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: .5)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(text,
               style: TextStyle(
                   color: c.text,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700)),
+                  fontSize: 13.5,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600)),
         ],
       ),
     );
+  }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 6,
-          children: [
-            chip(Icons.photo_rounded, '${n('inventoryImages')} photos'),
-            chip(Icons.videocam_rounded, '${n('inventoryVideos')} videos'),
-            chip(Icons.picture_as_pdf_rounded, '${n('inventoryPdfs')} PDFs'),
-          ],
-        ),
-        if (yard != '-') ...[
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(Icons.local_parking_rounded, size: 15, color: c.muted),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(yard,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: c.text,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ],
-          ),
-        ],
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            const Icon(Icons.verified_rounded, size: 15, color: _green),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                  'Inventory confirmed ${_formatDate(item['inventoryConfirmedAt'])}',
-                  style: TextStyle(color: c.muted, fontSize: 11.5)),
+  Widget _infoRow(IconData icon, String label, {Widget? trailing, String? value}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: c.muted),
+          const SizedBox(width: 6),
+          Text(label,
+              style: TextStyle(
+                  color: c.muted, fontSize: 11.5, fontWeight: FontWeight.w600)),
+          const Spacer(),
+          if (trailing != null)
+            trailing
+          else
+            Flexible(
+              child: Text(value ?? '—',
+                  textAlign: TextAlign.end,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: c.text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800)),
             ),
-          ],
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1537,11 +1552,17 @@ class _CaseCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final inv = _invStatus(item);
     final upload = !inventoryMode && _needsUpload(item);
-    final note = _str(item['requestNote']);
+    final actionColor = upload ? _green : _blue;
+
+    final reqNote = _str(item['requestNote']);
+    final fieldNote = reqNote != '-' ? reqNote : _str(item['reviewNote']);
+
+    final loaded = [_str(item['loadedShort']), _str(item['loadedDetail'])]
+        .where((e) => e != '-')
+        .join('\n');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: c.card,
         borderRadius: BorderRadius.circular(18),
@@ -1554,126 +1575,146 @@ class _CaseCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _blue.withOpacity(.1),
-                  borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // green accent strip
+            Container(width: 4, color: _green),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Header: S.No + Registration Number + Status
+                    Row(
+                      children: [
+                        Container(
+                          constraints: const BoxConstraints(minWidth: 32),
+                          height: 32,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: c.tile,
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: Text('$sNo',
+                              style: TextStyle(
+                                  color: c.text,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900)),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _label('REGISTRATION NUMBER'),
+                              const SizedBox(height: 1),
+                              Text(_formatVehicle(item['vehicleNumber']),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: c.text,
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: .6)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _StatusChip(_str(item['status'])),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // ── Customer Name
+                    _label('CUSTOMER NAME'),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Icon(Icons.person_outline_rounded,
+                            size: 17, color: c.muted),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(_v(_str(item['customerName'])),
+                              style: TextStyle(
+                                  color: c.text,
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w800)),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // ── Field Note
+                    _noteBox(
+                      title: 'Field Note',
+                      text: _v(fieldNote),
+                      icon: Icons.sticky_note_2_outlined,
+                      bg: c.dark
+                          ? const Color(0xffF59E0B).withOpacity(.10)
+                          : const Color(0xffFFF8E6),
+                      border: c.dark
+                          ? const Color(0xffF59E0B).withOpacity(.25)
+                          : const Color(0xffF5DFA3),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // ── Loaded Details
+                    _noteBox(
+                      title: 'Loaded Details',
+                      text: loaded.isEmpty ? '—' : loaded,
+                      icon: Icons.local_shipping_outlined,
+                      bg: c.dark
+                          ? _green.withOpacity(.10)
+                          : const Color(0xffEFF8F0),
+                      border: c.dark
+                          ? _green.withOpacity(.25)
+                          : const Color(0xffC5E3C8),
+                    ),
+
+                    const SizedBox(height: 10),
+                    Divider(height: 1, color: c.border),
+
+                    // ── Inventory / Confirmed By / Reported At
+                    _infoRow(Icons.inventory_2_outlined, 'Inventory',
+                        trailing: _Pill(inv.label, inv.bg, inv.fg)),
+                    _infoRow(Icons.verified_user_outlined, 'Confirmed By',
+                        value: _v(_str(item['reviewedByName']))),
+                    _infoRow(Icons.schedule_rounded, 'Reported At',
+                        value: _formatDate(item['createdAt'])),
+
+                    const SizedBox(height: 12),
+
+                    // ── Action
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: onTap,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: actionColor,
+                          backgroundColor: actionColor.withOpacity(.07),
+                          side: BorderSide(color: actionColor.withOpacity(.35)),
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text(upload ? 'Upload Inventory' : 'View',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 13)),
+                      ),
+                    ),
+                  ],
                 ),
-                child: Text('#$sNo',
-                    style: const TextStyle(
-                        color: _blue,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900)),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(_formatVehicle(item['vehicleNumber']),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: c.text,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: .3)),
-              ),
-              _StatusChip(_str(item['status'])),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(_str(item['customerName']),
-              style: TextStyle(
-                  color: c.text, fontSize: 13.5, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 2),
-          Text('${_str(item['bankName'])} • ${_str(item['branchName'])}',
-              style: TextStyle(
-                  color: c.muted, fontSize: 12, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 2),
-          Text(_str(item['caseCode']),
-              style: TextStyle(
-                  color: c.muted, fontSize: 11, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 10),
-          Divider(height: 1, color: c.border),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(Icons.person_pin_rounded, size: 16, color: c.muted),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                    '${_str(item['requestedByName'])} (${_str(item['requestedByRoleLabel'])})',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: c.text,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600)),
-              ),
-              InkWell(
-                onTap: () => _call(context, _str(item['requestedByPhone'])),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.call_rounded, size: 14, color: _blue),
-                      const SizedBox(width: 4),
-                      Text(_str(item['requestedByPhone']),
-                          style: const TextStyle(
-                              color: _blue,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(Icons.schedule_rounded, size: 15, color: c.muted),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(_formatDate(item['createdAt']),
-                    style: TextStyle(color: c.muted, fontSize: 11.5)),
-              ),
-              _Pill(inv.label, inv.bg, inv.fg),
-            ],
-          ),
-          if (inventoryMode) ...[
-            const SizedBox(height: 10),
-            _inventorySummary(),
-          ],
-          if (note != '-') ...[
-            const SizedBox(height: 8),
-            Text(note, style: TextStyle(color: c.muted, fontSize: 11.5)),
-          ],
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: onTap,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: upload ? _green : _blue,
-                backgroundColor: (upload ? _green : _blue).withOpacity(.07),
-                side: BorderSide(
-                    color: (upload ? _green : _blue).withOpacity(.35)),
-                padding: const EdgeInsets.symmetric(vertical: 11),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: Text(upload ? 'Upload Inventory' : 'View',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w800, fontSize: 13)),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2117,30 +2158,30 @@ class _ConfirmedDetailPageState extends State<ConfirmedDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _sectionTitle('Contact details', c),
-          const SizedBox(height: 10),
-          _ContactCard(
-            title: 'TRACER (FIELD REPORT)',
-            name: _str(
-                _conf['requestedByName'] ?? widget.item['requestedByName']),
-            sub: _str(_conf['requestedByRoleLabel'] ??
-                widget.item['requestedByRoleLabel']),
-            phone: _str(
-                _conf['requestedByPhone'] ?? widget.item['requestedByPhone']),
-            accent: const Color(0xffF59E0B),
-            icon: Icons.person_rounded,
-            c: c,
-          ),
-          const SizedBox(height: 10),
-          _ContactCard(
-            title: 'REPO ADMIN',
-            name: admin['name']!,
-            sub: admin['agency']!,
-            phone: admin['phone']!,
-            accent: _blue,
-            icon: Icons.apartment_rounded,
-            c: c,
-          ),
+          // _sectionTitle('Contact details', c),
+          // const SizedBox(height: 10),
+          // _ContactCard(
+          //   title: 'TRACER (FIELD REPORT)',
+          //   name: _str(
+          //       _conf['requestedByName'] ?? widget.item['requestedByName']),
+          //   sub: _str(_conf['requestedByRoleLabel'] ??
+          //       widget.item['requestedByRoleLabel']),
+          //   phone: _str(
+          //       _conf['requestedByPhone'] ?? widget.item['requestedByPhone']),
+          //   accent: const Color(0xffF59E0B),
+          //   icon: Icons.person_rounded,
+          //   c: c,
+          // ),
+          // const SizedBox(height: 10),
+          // _ContactCard(
+          //   title: 'REPO ADMIN',
+          //   name: admin['name']!,
+          //   sub: admin['agency']!,
+          //   phone: admin['phone']!,
+          //   accent: _blue,
+          //   icon: Icons.apartment_rounded,
+          //   c: c,
+          // ),
         ],
       ),
     );
@@ -2241,10 +2282,11 @@ class _ConfirmedDetailPageState extends State<ConfirmedDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _sectionTitle('Tracer inventory (pre/post)', c),
+          // _sectionTitle('Tracer inventory (pre/post)', c),
+          _sectionTitle('Uploaded files ',c),
           const SizedBox(height: 4),
-          Text('Submitted ${_formatDate(_conf['inventorySubmittedAt'])}',
-              style: TextStyle(color: c.muted, fontSize: 12)),
+          Text('Submitted Waiting for repo admin to confirm your inventory.\n${_formatDate(_conf['inventorySubmittedAt'])}',
+              style: TextStyle(color: c.text, fontSize: 12,fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
           if (yardName != '-') _yardCard(c, yardName),
           if (confirmed)
@@ -2314,6 +2356,11 @@ class _ConfirmedDetailPageState extends State<ConfirmedDetailPage> {
             ),
           ),
           const SizedBox(height: 12),
+          Text("● Each box has its own Upload button. "
+              "Use + Add More on a category to add another box of the same type."
+            ,style: TextStyle(color: c.text,fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -2331,58 +2378,58 @@ class _ConfirmedDetailPageState extends State<ConfirmedDetailPage> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          Divider(height: 1, color: c.border),
-          const SizedBox(height: 14),
-          _sectionTitle('Ask tracer to update inventory', c),
-          const SizedBox(height: 4),
-          Text(
-              'Sends a notification so they can add more photos, videos, or PDFs to this case.',
-              style: TextStyle(color: c.muted, fontSize: 12)),
-          const SizedBox(height: 10),
-          _tiny('Note to tracer (optional)', c),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _updateNoteCtrl,
-            minLines: 2,
-            maxLines: 4,
-            style: TextStyle(color: c.text, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'e.g. Please add yard photos and RC copy',
-              hintStyle: TextStyle(color: c.muted, fontSize: 13),
-              filled: true,
-              fillColor: c.card,
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: c.border)),
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: c.border)),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: ElevatedButton(
-              onPressed: _requesting ? null : _requestInventoryUpdate,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _green,
-                foregroundColor: Colors.white,
-                padding:
-                const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              child: _requesting
-                  ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
-                  : const Text('Request inventory update',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
-            ),
-          ),
+          // const SizedBox(height: 16),
+          // Divider(height: 1, color: c.border),
+          // const SizedBox(height: 14),
+          // _sectionTitle('Ask tracer to update inventory', c),
+          // const SizedBox(height: 4),
+          // Text(
+          //     'Sends a notification so they can add more photos, videos, or PDFs to this case.',
+          //     style: TextStyle(color: c.muted, fontSize: 12)),
+          // const SizedBox(height: 10),
+          // _tiny('Note to tracer (optional)', c),
+          // const SizedBox(height: 6),
+          // TextField(
+          //   controller: _updateNoteCtrl,
+          //   minLines: 2,
+          //   maxLines: 4,
+          //   style: TextStyle(color: c.text, fontSize: 14),
+          //   decoration: InputDecoration(
+          //     hintText: 'e.g. Please add yard photos and RC copy',
+          //     hintStyle: TextStyle(color: c.muted, fontSize: 13),
+          //     filled: true,
+          //     fillColor: c.card,
+          //     border: OutlineInputBorder(
+          //         borderRadius: BorderRadius.circular(10),
+          //         borderSide: BorderSide(color: c.border)),
+          //     enabledBorder: OutlineInputBorder(
+          //         borderRadius: BorderRadius.circular(10),
+          //         borderSide: BorderSide(color: c.border)),
+          //   ),
+          // ),
+          // const SizedBox(height: 10),
+          // Align(
+          //   alignment: Alignment.centerLeft,
+          //   child: ElevatedButton(
+          //     onPressed: _requesting ? null : _requestInventoryUpdate,
+          //     style: ElevatedButton.styleFrom(
+          //       backgroundColor: _green,
+          //       foregroundColor: Colors.white,
+          //       padding:
+          //       const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+          //       shape: RoundedRectangleBorder(
+          //           borderRadius: BorderRadius.circular(10)),
+          //     ),
+          //     child: _requesting
+          //         ? const SizedBox(
+          //         width: 18,
+          //         height: 18,
+          //         child: CircularProgressIndicator(
+          //             strokeWidth: 2, color: Colors.white))
+          //         : const Text('Request inventory update',
+          //         style: TextStyle(fontWeight: FontWeight.w800)),
+          //   ),
+          // ),
         ],
       ),
     );

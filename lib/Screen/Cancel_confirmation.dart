@@ -9,6 +9,26 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ─────────────────────────────────────────────────────────────
+// THEME COLORS
+// ─────────────────────────────────────────────────────────────
+class _C {
+  static const bg = Color(0xFFF4F6FB);
+  static const primary = Color(0xFF2653C8);
+  static const green = Color(0xFF2E7D32);
+  static const danger = Color(0xFFC62828);
+  static const dangerBg = Color(0xFFFDECEA);
+  static const text = Color(0xFF1F2430);
+  static const muted = Color(0xFF6B7280);
+  static const border = Color(0xFFE5E8F0);
+  static const noteBg = Color(0xFFFFF8E6);
+  static const noteBorder = Color(0xFFF5DFA3);
+  static const reviewBg = Color(0xFFEEF3FF);
+  static const reviewBorder = Color(0xFFCFDBFA);
+  static const loadBg = Color(0xFFEFF8F0);
+  static const loadBorder = Color(0xFFC5E3C8);
+}
+
+// ─────────────────────────────────────────────────────────────
 // MODEL
 // ─────────────────────────────────────────────────────────────
 class CancelItem {
@@ -38,6 +58,23 @@ class CancelItem {
   final String parkingYardAddress;
   final bool inventorySubmitted;
   final bool inventoryConfirmed;
+  final String chassisNumber;
+  final String loadedShort;
+  final String loadedDetail;
+  final String parkingYardArea;
+  final String parkingYardPincode;
+  final String parkingYardPhone;
+  final String parkingYardCode;
+  final String parkingYardManagerName;
+  final String parkingYardManagerPhone;
+  final int photosCount;
+  final int inventoryImagesCount;
+  final int inventoryVideosCount;
+  final int inventoryPdfsCount;
+  final bool inventoryRevisionRequested;
+  final String inventoryRevisionNote;
+  final DateTime? confirmedAt;
+  final DateTime? inventoryConfirmedAt;
 
   CancelItem({
     required this.id,
@@ -66,10 +103,28 @@ class CancelItem {
     required this.parkingYardAddress,
     required this.inventorySubmitted,
     required this.inventoryConfirmed,
+    required this.chassisNumber,
+    required this.loadedShort,
+    required this.loadedDetail,
+    required this.parkingYardArea,
+    required this.parkingYardPincode,
+    required this.parkingYardPhone,
+    required this.parkingYardCode,
+    required this.parkingYardManagerName,
+    required this.parkingYardManagerPhone,
+    required this.photosCount,
+    required this.inventoryImagesCount,
+    required this.inventoryVideosCount,
+    required this.inventoryPdfsCount,
+    required this.inventoryRevisionRequested,
+    required this.inventoryRevisionNote,
+    required this.confirmedAt,
+    required this.inventoryConfirmedAt,
   });
 
   static String _s(dynamic v) => (v ?? '').toString().trim();
   static num _n(dynamic v) => v is num ? v : num.tryParse(_s(v)) ?? 0;
+  static int _len(dynamic v) => v is List ? v.length : 0;
   static DateTime? _d(dynamic v) =>
       v == null ? null : DateTime.tryParse(v.toString())?.toLocal();
 
@@ -100,6 +155,23 @@ class CancelItem {
     parkingYardAddress: _s(j['parkingYardAddress']),
     inventorySubmitted: j['inventorySubmitted'] == true,
     inventoryConfirmed: j['inventoryConfirmed'] == true,
+    chassisNumber: _s(j['chassisNumber']),
+    loadedShort: _s(j['loadedShort']),
+    loadedDetail: _s(j['loadedDetail']),
+    parkingYardArea: _s(j['parkingYardArea']),
+    parkingYardPincode: _s(j['parkingYardPincode']),
+    parkingYardPhone: _s(j['parkingYardPhone']),
+    parkingYardCode: _s(j['parkingYardCode']),
+    parkingYardManagerName: _s(j['parkingYardManagerName']),
+    parkingYardManagerPhone: _s(j['parkingYardManagerPhone']),
+    photosCount: _len(j['photos']),
+    inventoryImagesCount: _len(j['inventoryImages']),
+    inventoryVideosCount: _len(j['inventoryVideos']),
+    inventoryPdfsCount: _len(j['inventoryPdfs']),
+    inventoryRevisionRequested: j['inventoryRevisionRequested'] == true,
+    inventoryRevisionNote: _s(j['inventoryRevisionNote']),
+    confirmedAt: _d(j['confirmedAt']),
+    inventoryConfirmedAt: _d(j['inventoryConfirmedAt']),
   );
 
   /// Search ke liye ek hi string
@@ -115,6 +187,10 @@ class CancelItem {
     shareChannel,
     requestNote,
     reviewNote,
+    chassisNumber,
+    loadedShort,
+    loadedDetail,
+    parkingYardName,
   ].join(' ').toLowerCase().replaceAll(' ', '');
 }
 
@@ -173,8 +249,9 @@ class _CancelConfirmationsScreenState extends State<CancelConfirmationsScreen> {
     int page = 1;
     while (true) {
       final uri = Uri.parse('$_base?status=REJECTED&page=$page&limit=$_limit');
-      final res =
-      await http.get(uri, headers: headers).timeout(const Duration(seconds: 30));
+      final res = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 30));
       if (res.statusCode != 200) {
         throw Exception('Server error ${res.statusCode}');
       }
@@ -260,6 +337,9 @@ class _CancelConfirmationsScreenState extends State<CancelConfirmationsScreen> {
         'Reported At',
         'Reviewed By',
         'Reviewed At',
+        'Chassis Number',
+        'Loaded Short',
+        'Loaded Detail',
       ];
       sheet.appendRow(headers.map((h) => xl.TextCellValue(h)).toList());
 
@@ -281,9 +361,14 @@ class _CancelConfirmationsScreenState extends State<CancelConfirmationsScreen> {
           xl.TextCellValue(r.requestedByPhone),
           xl.TextCellValue(r.shareChannel),
           xl.TextCellValue(r.traceMode),
-          xl.TextCellValue(r.createdAt == null ? '' : _fmt.format(r.createdAt!)),
+          xl.TextCellValue(
+              r.createdAt == null ? '' : _fmt.format(r.createdAt!)),
           xl.TextCellValue(r.reviewedByName),
-          xl.TextCellValue(r.reviewedAt == null ? '' : _fmt.format(r.reviewedAt!)),
+          xl.TextCellValue(
+              r.reviewedAt == null ? '' : _fmt.format(r.reviewedAt!)),
+          xl.TextCellValue(r.chassisNumber),
+          xl.TextCellValue(r.loadedShort),
+          xl.TextCellValue(r.loadedDetail),
         ]);
       }
 
@@ -308,7 +393,13 @@ class _CancelConfirmationsScreenState extends State<CancelConfirmationsScreen> {
 
   void _snack(String m) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(m),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   // ── UI ─────────────────────────────────────────────────────
@@ -316,15 +407,34 @@ class _CancelConfirmationsScreenState extends State<CancelConfirmationsScreen> {
   Widget build(BuildContext context) {
     final list = _filtered;
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: _C.bg,
       appBar: AppBar(
-        title: const Text('Cancel confirmations'),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.white,
+        foregroundColor: _C.text,
+        titleSpacing: 0,
+        title: const Text(
+          'Cancel confirmations',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+        ),
         actions: [
           Center(
-            child: Padding(
-              padding: const EdgeInsets.only(right: 14),
-              child: Text('${list.length} cases',
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Container(
+              margin: const EdgeInsets.only(right: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: _C.dangerBg,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${list.length} cases',
+                style: const TextStyle(
+                  color: _C.danger,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5,
+                ),
+              ),
             ),
           ),
         ],
@@ -332,6 +442,7 @@ class _CancelConfirmationsScreenState extends State<CancelConfirmationsScreen> {
       body: Column(
         children: [
           _buildTopBar(),
+          const Divider(height: 1, color: _C.border),
           Expanded(child: _buildBody(list)),
         ],
       ),
@@ -341,65 +452,68 @@ class _CancelConfirmationsScreenState extends State<CancelConfirmationsScreen> {
   Widget _buildTopBar() {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      child: Column(
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
+      child: Row(
         children: [
-          TextField(
-            controller: _searchCtrl,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _doSearch(),
-            onChanged: (v) => setState(() => _query = v.trim()),
-            decoration: InputDecoration(
-              hintText: 'Search vehicle, customer, bank, case code…',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchCtrl.text.isEmpty
-                  ? null
-                  : IconButton(icon: const Icon(Icons.close), onPressed: _reset),
-              isDense: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          Expanded(
+            child: TextField(
+              controller: _searchCtrl,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _doSearch(),
+              onChanged: (v) => setState(() => _query = v.trim()),
+              style: const TextStyle(fontSize: 14.5),
+              decoration: InputDecoration(
+                hintText: 'Search vehicle, customer, bank, case code…',
+                hintStyle: const TextStyle(color: _C.muted, fontSize: 13.5),
+                prefixIcon: const Icon(Icons.search, color: _C.muted),
+                suffixIcon: _searchCtrl.text.isEmpty
+                    ? null
+                    : IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: _reset,
+                ),
+                filled: true,
+                fillColor: _C.bg,
+                isDense: true,
+                contentPadding:
+                const EdgeInsets.symmetric(vertical: 13, horizontal: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _C.primary, width: 1.4),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _doSearch,
-                  icon: const Icon(Icons.search, size: 18),
-                  label: const Text('Search'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2653C8),
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _reset,
-                  child: const Text('Reset'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
-                  onPressed: _downloading ? null : _downloadExcel,
-                  icon: _downloading
-                      ? const SizedBox(
-                      width: 16,
-                      height: 16,
+          const SizedBox(width: 10),
+          Tooltip(
+            message: 'Download Excel',
+            child: Material(
+              color: _downloading ? Colors.grey.shade400 : _C.green,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: _downloading ? null : _downloadExcel,
+                child: SizedBox(
+                  width: 46,
+                  height: 46,
+                  child: Center(
+                    child: _downloading
+                        ? const SizedBox(
+                      width: 20,
+                      height: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.download, size: 18),
-                  label: const Text('Download Excel'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2E7D32),
-                    foregroundColor: Colors.white,
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                        : const Icon(Icons.download_rounded,
+                        color: Colors.white, size: 24),
                   ),
                 ),
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -415,23 +529,52 @@ class _CancelConfirmationsScreenState extends State<CancelConfirmationsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 40, color: Colors.red),
-              const SizedBox(height: 8),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              ElevatedButton(onPressed: _load, child: const Text('Retry')),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                    color: _C.dangerBg, shape: BoxShape.circle),
+                child: const Icon(Icons.wifi_off_rounded,
+                    size: 34, color: _C.danger),
+              ),
+              const SizedBox(height: 14),
+              Text(_error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: _C.muted)),
+              const SizedBox(height: 14),
+              ElevatedButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _C.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
             ],
           ),
         ),
       );
     }
     if (list.isEmpty) {
-      return const Center(child: Text('Koi cancel confirmation nahi mila'));
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.inbox_outlined, size: 56, color: Colors.grey.shade400),
+            const SizedBox(height: 10),
+            const Text('Koi cancel confirmation nahi mila',
+                style: TextStyle(color: _C.muted, fontSize: 14)),
+          ],
+        ),
+      );
     }
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
-        padding: const EdgeInsets.all(12),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
         itemCount: list.length,
         itemBuilder: (_, i) {
           final item = list[i];
@@ -453,109 +596,244 @@ class _CancelCard extends StatelessWidget {
 
   const _CancelCard({required this.item, required this.sno, required this.fmt});
 
-  String _v(String s) => s.isEmpty ? '—' : s;
+  String _v(String s) => (s.isEmpty || s == '-') ? '—' : s;
+  String _dt(DateTime? d) => d == null ? '—' : fmt.format(d);
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 1.5,
+    final loadedText = [item.loadedShort, item.loadedDetail]
+        .where((e) => e.isNotEmpty)
+        .join('\n');
+
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header: S.No + vehicle + CANCEL badge
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 15,
-                  backgroundColor: const Color(0xFFEDEFF5),
-                  child: Text('$sno',
-                      style: const TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    _v(item.vehicleNumber),
-                    style: const TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: .5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _C.border),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0F000000), blurRadius: 10, offset: Offset(0, 3)),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // red accent strip
+              Container(width: 4, color: _C.danger),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── Header: S.No + Registration Number + Status
+                      Row(
+                        children: [
+                          Container(
+                            constraints: const BoxConstraints(minWidth: 32),
+                            height: 32,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: _C.bg,
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: Text('$sno',
+                                style: const TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w900)),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _label('REGISTRATION NUMBER'),
+                                const SizedBox(height: 1),
+                                Text(
+                                  _v(item.vehicleNumber),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.8,
+                                    color: _C.text,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _C.dangerBg,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'CANCEL',
+                              style: TextStyle(
+                                color: _C.danger,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11.5,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ── Customer Name
+                      _label('CUSTOMER NAME'),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          const Icon(Icons.person_outline,
+                              size: 18, color: _C.muted),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _v(item.customerName),
+                              style: const TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: _C.text),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      // ── Action
+                      Row(
+                        children: [
+                          const Icon(Icons.bolt_rounded,
+                              size: 17, color: _C.muted),
+                          const SizedBox(width: 6),
+                          const Text('Action',
+                              style:
+                              TextStyle(fontSize: 12.5, color: _C.muted)),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: _C.bg,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: _C.border),
+                            ),
+                            child: Text(
+                              _v(item.finalAction).toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: _C.text,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // ── Field Note
+                      const SizedBox(height: 12),
+                      _noteBox('Field Note', _v(item.requestNote), _C.noteBg,
+                          _C.noteBorder, Icons.sticky_note_2_outlined),
+                      const SizedBox(height: 8),
+
+                      // ── Loaded Details
+                      _noteBox(
+                          'Loaded Details',
+                          loadedText.isEmpty ? '—' : loadedText,
+                          _C.loadBg,
+                          _C.loadBorder,
+                          Icons.local_shipping_outlined),
+
+                      const SizedBox(height: 12),
+                      const Divider(height: 1, color: _C.border),
+                      const SizedBox(height: 10),
+
+                      // ── Reported At
+                      Row(
+                        children: [
+                          const Icon(Icons.schedule,
+                              size: 14, color: _C.muted),
+                          const SizedBox(width: 6),
+                          const Text('Reported At',
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: _C.muted)),
+                          const Spacer(),
+                          Text(
+                            _dt(item.createdAt),
+                            style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: _C.text),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFDE4E1),
-                    border: Border.all(color: const Color(0xFFE57373)),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text('CANCEL',
-                      style: TextStyle(
-                          color: Color(0xFFB71C1C),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12)),
-                ),
-              ],
-            ),
-            const Divider(height: 20),
-            _row(Icons.person, 'Customer', item.customerName),
-            _row(Icons.confirmation_number, 'Case Code', item.caseCode),
-            _row(Icons.account_balance, 'Bank / NBFC', item.bankName),
-            _row(Icons.location_city, 'Branch', item.branchName),
-            _row(Icons.sticky_note_2_outlined, 'Field Note', item.requestNote),
-            _row(Icons.rate_review_outlined, 'Review Note', item.reviewNote),
-            const Divider(height: 20),
-            _row(Icons.badge_outlined, 'Reported By',
-                '${_v(item.requestedByName)} (${_v(item.requestedByRoleLabel)})'),
-            _row(Icons.phone, 'Phone', item.requestedByPhone),
-            _row(Icons.share, 'Share Channel', item.shareChannel.toUpperCase()),
-            _row(Icons.travel_explore, 'Trace Mode', item.traceMode),
-            _row(Icons.schedule, 'Reported At',
-                item.createdAt == null ? '' : fmt.format(item.createdAt!)),
-            _row(Icons.verified_user_outlined, 'Reviewed By', item.reviewedByName),
-            _row(Icons.event_available, 'Reviewed At',
-                item.reviewedAt == null ? '' : fmt.format(item.reviewedAt!)),
-            if (item.parkingYardName.isNotEmpty ||
-                item.totalAmount > 0 ||
-                item.inventorySubmitted) ...[
-              const Divider(height: 20),
-              _row(Icons.local_parking, 'Parking Yard', item.parkingYardName),
-              _row(Icons.place_outlined, 'Yard Address', item.parkingYardAddress),
-              _row(Icons.currency_rupee, 'Vehicle Bill', '${item.vehicleBillAmount}'),
-              _row(Icons.currency_rupee, 'Other Bill', '${item.otherBillAmount}'),
-              _row(Icons.currency_rupee, 'Total', '${item.totalAmount}'),
-              _row(Icons.inventory_2_outlined, 'Inventory',
-                  item.inventoryConfirmed
-                      ? 'Confirmed'
-                      : item.inventorySubmitted
-                      ? 'Submitted'
-                      : 'Not submitted'),
+              ),
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _row(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
+  Widget _label(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 9,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.5,
+        color: _C.muted,
+      ),
+    );
+  }
+
+  Widget _noteBox(
+      String title, String text, Color bg, Color border, IconData icon) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: border),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: Colors.grey.shade600),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 104,
-            child: Text(label,
-                style: TextStyle(color: Colors.grey.shade700, fontSize: 12.5)),
+          Row(
+            children: [
+              Icon(icon, size: 14, color: _C.muted),
+              const SizedBox(width: 5),
+              Text(title.toUpperCase(),
+                  style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                      color: _C.muted)),
+            ],
           ),
-          Expanded(
-            child: Text(_v(value),
-                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-          ),
+          const SizedBox(height: 4),
+          Text(text,
+              style: const TextStyle(
+                  fontSize: 13.5,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                  color: _C.text)),
         ],
       ),
     );

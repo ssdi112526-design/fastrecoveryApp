@@ -2032,10 +2032,10 @@ class _SeizedConfirmedDetailPageState extends State<SeizedConfirmedDetailPage> {
                     else if (_error)
                       _errorView(c)
                     else ...[
-                        _contactSection(c),
-                        Divider(height: 1, color: c.border),
-                        _fieldsSection(c),
-                        Divider(height: 1, color: c.border),
+                        // _contactSection(c),
+                        // Divider(height: 1, color: c.border),
+                        // _fieldsSection(c),
+                        // Divider(height: 1, color: c.border),
                         _inventorySection(c),
                         if (_message.isNotEmpty) ...[
                           Divider(height: 1, color: c.border),
@@ -2124,46 +2124,46 @@ class _SeizedConfirmedDetailPageState extends State<SeizedConfirmedDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _sectionTitle('Contact details', c),
-          const SizedBox(height: 10),
-          _ContactCard(
-            title: 'TRACER (FIELD REPORT)',
-            name: _str(
-                _conf['requestedByName'] ?? widget.item['requestedByName']),
-            sub: _str(_conf['requestedByRoleLabel'] ??
-                widget.item['requestedByRoleLabel']),
-            phone: _str(
-                _conf['requestedByPhone'] ?? widget.item['requestedByPhone']),
-            accent: const Color(0xffF59E0B),
-            icon: Icons.person_rounded,
-            c: c,
-          ),
-          const SizedBox(height: 10),
-          _ContactCard(
-            title: 'REPO ADMIN',
-            name: admin['name']!,
-            sub: admin['agency']!,
-            phone: admin['phone']!,
-            accent: _blue,
-            icon: Icons.apartment_rounded,
-            c: c,
-          ),
+          // _sectionTitle('Contact details', c),
+          // const SizedBox(height: 10),
+          // _ContactCard(
+          //   title: 'TRACER (FIELD REPORT)',
+          //   name: _str(
+          //       _conf['requestedByName'] ?? widget.item['requestedByName']),
+          //   sub: _str(_conf['requestedByRoleLabel'] ??
+          //       widget.item['requestedByRoleLabel']),
+          //   phone: _str(
+          //       _conf['requestedByPhone'] ?? widget.item['requestedByPhone']),
+          //   accent: const Color(0xffF59E0B),
+          //   icon: Icons.person_rounded,
+          //   c: c,
+          // ),
+          // const SizedBox(height: 10),
+          // _ContactCard(
+          //   title: 'REPO ADMIN',
+          //   name: admin['name']!,
+          //   sub: admin['agency']!,
+          //   phone: admin['phone']!,
+          //   accent: _blue,
+          //   icon: Icons.apartment_rounded,
+          //   c: c,
+          // ),
         ],
       ),
     );
   }
 
-  Widget _fieldsSection(_C c) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: _vehicleFields(
-        c,
-        caseMap: _case,
-        notify: _notify,
-        requestNote: _str(_conf['requestNote']),
-      ),
-    );
-  }
+  // Widget _fieldsSection(_C c) {
+  //   return Padding(
+  //     padding: const EdgeInsets.all(16),
+  //     child: _vehicleFields(
+  //       c,
+  //       caseMap: _case,
+  //       notify: _notify,
+  //       requestNote: _str(_conf['requestNote']),
+  //     ),
+  //   );
+  // }
 
   // ---------- Inventory ----------
   /// kind (image/video/pdf) ke files category-wise group karta hai.
@@ -2190,7 +2190,6 @@ class _SeizedConfirmedDetailPageState extends State<SeizedConfirmedDetailPage> {
 
   Widget _inventorySection(_C c) {
     final submitted = _conf['inventorySubmitted'] == true;
-
     if (!submitted) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -2248,10 +2247,14 @@ class _SeizedConfirmedDetailPageState extends State<SeizedConfirmedDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _sectionTitle('Tracer inventory (pre/post)', c),
+          Text("Inventory confirmed",
+              style: TextStyle(color: c.text, fontSize: 30, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text('Submitted ${_formatDate(_conf['inventorySubmittedAt'])}',
-              style: TextStyle(color: c.muted, fontSize: 12)),
+          Text("Uploaded files",
+              style: TextStyle(color: c.text, fontSize: 16, fontWeight: FontWeight.bold)),
+          // _sectionTitle('Uploaded files', c),
+          // Text('Submitted ${_formatDate(_conf['inventorySubmittedAt'])}',
+          //     style: TextStyle(color: c.muted, fontSize: 12)),
           const SizedBox(height: 12),
           if (yardName != '-') _yardCard(c, yardName),
           if (confirmed)
@@ -2321,6 +2324,11 @@ class _SeizedConfirmedDetailPageState extends State<SeizedConfirmedDetailPage> {
             ),
           ),
           const SizedBox(height: 12),
+          Text("● Each box has its own Upload button. "
+              "Use + Add More on a category to add another box of the same type."
+            ,style: TextStyle(color: c.text,fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -2338,58 +2346,58 @@ class _SeizedConfirmedDetailPageState extends State<SeizedConfirmedDetailPage> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          Divider(height: 1, color: c.border),
-          const SizedBox(height: 14),
-          _sectionTitle('Ask tracer to update inventory', c),
-          const SizedBox(height: 4),
-          Text(
-              'Sends a notification so they can add more photos, videos, or PDFs to this case.',
-              style: TextStyle(color: c.muted, fontSize: 12)),
-          const SizedBox(height: 10),
-          _tiny('Note to tracer (optional)', c),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _updateNoteCtrl,
-            minLines: 2,
-            maxLines: 4,
-            style: TextStyle(color: c.text, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'e.g. Please add yard photos and RC copy',
-              hintStyle: TextStyle(color: c.muted, fontSize: 13),
-              filled: true,
-              fillColor: c.card,
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: c.border)),
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: c.border)),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: ElevatedButton(
-              onPressed: _requesting ? null : _requestInventoryUpdate,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _green,
-                foregroundColor: Colors.white,
-                padding:
-                const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              child: _requesting
-                  ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
-                  : const Text('Request inventory update',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
-            ),
-          ),
+          // const SizedBox(height: 16),
+          // Divider(height: 1, color: c.border),
+          // const SizedBox(height: 14),
+          // _sectionTitle('Ask tracer to update inventory', c),
+          // const SizedBox(height: 4),
+          // Text(
+          //     'Sends a notification so they can add more photos, videos, or PDFs to this case.',
+          //     style: TextStyle(color: c.muted, fontSize: 12)),
+          // const SizedBox(height: 10),
+          // _tiny('Note to tracer (optional)', c),
+          // const SizedBox(height: 6),
+          // TextField(
+          //   controller: _updateNoteCtrl,
+          //   minLines: 2,
+          //   maxLines: 4,
+          //   style: TextStyle(color: c.text, fontSize: 14),
+          //   decoration: InputDecoration(
+          //     hintText: 'e.g. Please add yard photos and RC copy',
+          //     hintStyle: TextStyle(color: c.muted, fontSize: 13),
+          //     filled: true,
+          //     fillColor: c.card,
+          //     border: OutlineInputBorder(
+          //         borderRadius: BorderRadius.circular(10),
+          //         borderSide: BorderSide(color: c.border)),
+          //     enabledBorder: OutlineInputBorder(
+          //         borderRadius: BorderRadius.circular(10),
+          //         borderSide: BorderSide(color: c.border)),
+          //   ),
+          // ),
+          // const SizedBox(height: 10),
+          // Align(
+          //   alignment: Alignment.centerLeft,
+          //   child: ElevatedButton(
+          //     onPressed: _requesting ? null : _requestInventoryUpdate,
+          //     style: ElevatedButton.styleFrom(
+          //       backgroundColor: _green,
+          //       foregroundColor: Colors.white,
+          //       padding:
+          //       const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+          //       shape: RoundedRectangleBorder(
+          //           borderRadius: BorderRadius.circular(10)),
+          //     ),
+          //     child: _requesting
+          //         ? const SizedBox(
+          //         width: 18,
+          //         height: 18,
+          //         child: CircularProgressIndicator(
+          //             strokeWidth: 2, color: Colors.white))
+          //         : const Text('Request inventory update',
+          //         style: TextStyle(fontWeight: FontWeight.w800)),
+          //   ),
+          // ),
         ],
       ),
     );
@@ -2871,7 +2879,7 @@ class _UploadInventoryPageState extends State<SeizedUploadInventoryPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _sectionTitle('Vehicle & trace details', c),
+        // _sectionTitle('Vehicle & trace details', c),
         const SizedBox(height: 10),
         if (_dConf['inventoryRevisionRequested'] == true)
           Container(
@@ -2888,110 +2896,110 @@ class _UploadInventoryPageState extends State<SeizedUploadInventoryPage> {
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600)),
           ),
-        _traceTable(c),
+        // _traceTable(c),
         const SizedBox(height: 8),
       ],
     );
   }
 
   /// Web ke user page jaisa "Field | Value" table (Vehicle & trace details)
-  Widget _traceTable(_C c) {
-    final k = _dCase;
-    final f = _dConf.isNotEmpty ? _dConf : widget.item;
-
-    // pehli non-empty value, warna '—'
-    String first(List<dynamic> xs) {
-      for (final x in xs) {
-        final s = (x ?? '').toString().trim();
-        if (s.isNotEmpty && s != 'null' && s != '-') return s;
-      }
-      return '—';
-    }
-
-    final status = first([f['status'], k['confirmationStatus']]);
-    final statusNice = status == '—'
-        ? status
-        : status[0].toUpperCase() + status.substring(1).toLowerCase();
-
-    final rows = <List<String>>[
-      ['Traced By', first([f['requestedByName']])],
-      ['Tracer Role', first([f['requestedByRoleLabel']])],
-      ['Reporter Mobile', first([f['requestedByPhone']])],
-      ['Field Note', first([f['requestNote'], f['reviewNote']])],
-      ['Reported At', _formatDateTable(f['createdAt'])],
-      ['Confirmation Status', first([f['status'], k['confirmationStatus']])],
-      ['Agency / Company',
-        first([k['companyName'], k['agencyName'], f['companyName']])],
-      ['Registration No', first([k['vehicleNumber'], f['vehicleNumber']])],
-      ['Customer Name', first([k['customerName'], f['customerName']])],
-      ['Father Name', first([k['fatherName']])],
-      ['Mobile No', first([k['mobileNumber']])],
-      ['Alternate Mobile No', first([k['alternateMobileNumber']])],
-      ['Reference No', first([k['referenceNumber']])],
-      ['Engine No', first([k['engineNumber']])],
-      ['Chassis No', first([k['chassisNumber']])],
-      ['Vehicle Brand', first([k['vehicleBrand']])],
-      ['Vehicle Model', first([k['vehicleModel']])],
-      ['Registration State', first([k['registrationState']])],
-      ['City', first([k['city']])],
-      ['District', first([k['district']])],
-      ['State', first([k['state']])],
-      ['Pincode', first([k['pincode']])],
-      ['Outstanding Amount',
-        first([k['totalOutstandingAmount'], k['dueAmount']])],
-      ['Priority', first([k['priority']])],
-      ['Field Notes', first([k['fieldNotes']])],
-      ['Loaded details', first([k['loadedDetail'], k['loadedShort']])],
-      ['Status', statusNice],
-    ];
-
-    Widget cell(String t, {bool bold = false, bool head = false}) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-      child: Text(
-        t,
-        textAlign: head ? TextAlign.center : TextAlign.start,
-        style: TextStyle(
-          color: c.text,
-          fontSize: head ? 13 : 12.5,
-          fontWeight: (bold || head) ? FontWeight.w800 : FontWeight.w500,
-        ),
-      ),
-    );
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: c.text.withOpacity(.55), width: 1.4),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Table(
-        columnWidths: const {
-          0: FlexColumnWidth(1),
-          1: FlexColumnWidth(1.25),
-        },
-        border: TableBorder.symmetric(inside: BorderSide(color: c.border)),
-        children: [
-          TableRow(
-            decoration: BoxDecoration(
-              color: c.dark ? const Color(0xff1A2440) : const Color(0xffE5E7EB),
-            ),
-            children: [
-              cell('Field', head: true),
-              cell('Value', head: true),
-            ],
-          ),
-          for (var i = 0; i < rows.length; i++)
-            TableRow(
-              decoration: BoxDecoration(color: i.isEven ? c.card : c.tile),
-              children: [
-                cell(rows[i][0], bold: true),
-                cell(rows[i][1]),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
+  // Widget _traceTable(_C c) {
+  //   final k = _dCase;
+  //   final f = _dConf.isNotEmpty ? _dConf : widget.item;
+  //
+  //   // pehli non-empty value, warna '—'
+  //   String first(List<dynamic> xs) {
+  //     for (final x in xs) {
+  //       final s = (x ?? '').toString().trim();
+  //       if (s.isNotEmpty && s != 'null' && s != '-') return s;
+  //     }
+  //     return '—';
+  //   }
+  //
+  //   final status = first([f['status'], k['confirmationStatus']]);
+  //   final statusNice = status == '—'
+  //       ? status
+  //       : status[0].toUpperCase() + status.substring(1).toLowerCase();
+  //
+  //   final rows = <List<String>>[
+  //     ['Traced By', first([f['requestedByName']])],
+  //     ['Tracer Role', first([f['requestedByRoleLabel']])],
+  //     ['Reporter Mobile', first([f['requestedByPhone']])],
+  //     ['Field Note', first([f['requestNote'], f['reviewNote']])],
+  //     ['Reported At', _formatDateTable(f['createdAt'])],
+  //     ['Confirmation Status', first([f['status'], k['confirmationStatus']])],
+  //     ['Agency / Company',
+  //       first([k['companyName'], k['agencyName'], f['companyName']])],
+  //     ['Registration No', first([k['vehicleNumber'], f['vehicleNumber']])],
+  //     ['Customer Name', first([k['customerName'], f['customerName']])],
+  //     ['Father Name', first([k['fatherName']])],
+  //     ['Mobile No', first([k['mobileNumber']])],
+  //     ['Alternate Mobile No', first([k['alternateMobileNumber']])],
+  //     ['Reference No', first([k['referenceNumber']])],
+  //     ['Engine No', first([k['engineNumber']])],
+  //     ['Chassis No', first([k['chassisNumber']])],
+  //     ['Vehicle Brand', first([k['vehicleBrand']])],
+  //     ['Vehicle Model', first([k['vehicleModel']])],
+  //     ['Registration State', first([k['registrationState']])],
+  //     ['City', first([k['city']])],
+  //     ['District', first([k['district']])],
+  //     ['State', first([k['state']])],
+  //     ['Pincode', first([k['pincode']])],
+  //     ['Outstanding Amount',
+  //       first([k['totalOutstandingAmount'], k['dueAmount']])],
+  //     ['Priority', first([k['priority']])],
+  //     ['Field Notes', first([k['fieldNotes']])],
+  //     ['Loaded details', first([k['loadedDetail'], k['loadedShort']])],
+  //     ['Status', statusNice],
+  //   ];
+  //
+  //   Widget cell(String t, {bool bold = false, bool head = false}) => Padding(
+  //     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+  //     child: Text(
+  //       t,
+  //       textAlign: head ? TextAlign.center : TextAlign.start,
+  //       style: TextStyle(
+  //         color: c.text,
+  //         fontSize: head ? 13 : 12.5,
+  //         fontWeight: (bold || head) ? FontWeight.w800 : FontWeight.w500,
+  //       ),
+  //     ),
+  //   );
+  //
+  //   return Container(
+  //     decoration: BoxDecoration(
+  //       borderRadius: BorderRadius.circular(8),
+  //       border: Border.all(color: c.text.withOpacity(.55), width: 1.4),
+  //     ),
+  //     clipBehavior: Clip.antiAlias,
+  //     child: Table(
+  //       columnWidths: const {
+  //         0: FlexColumnWidth(1),
+  //         1: FlexColumnWidth(1.25),
+  //       },
+  //       border: TableBorder.symmetric(inside: BorderSide(color: c.border)),
+  //       children: [
+  //         TableRow(
+  //           decoration: BoxDecoration(
+  //             color: c.dark ? const Color(0xff1A2440) : const Color(0xffE5E7EB),
+  //           ),
+  //           children: [
+  //             cell('Field', head: true),
+  //             cell('Value', head: true),
+  //           ],
+  //         ),
+  //         for (var i = 0; i < rows.length; i++)
+  //           TableRow(
+  //             decoration: BoxDecoration(color: i.isEven ? c.card : c.tile),
+  //             children: [
+  //               cell(rows[i][0], bold: true),
+  //               cell(rows[i][1]),
+  //             ],
+  //           ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   int _selected(String kind) =>
       _slots[kind]!.where((s) => s.path != null).length;
@@ -3030,7 +3038,12 @@ class _UploadInventoryPageState extends State<SeizedUploadInventoryPage> {
           ),
         );
         if (src == null) return;
-        final f = await _picker.pickImage(source: src, imageQuality: 85);
+        final f = await _picker.pickImage(
+          source: src,
+          imageQuality: 70,
+          maxWidth: 1600,
+          maxHeight: 1600,
+        );
         if (f != null) setState(() => slot.path = f.path);
       } else if (kind == 'videos') {
         final f = await _picker.pickVideo(source: ImageSource.gallery);
@@ -3102,6 +3115,38 @@ class _UploadInventoryPageState extends State<SeizedUploadInventoryPage> {
     });
   }
 
+  ({http.MediaType type, String name}) _mediaInfo(String kind, String path) {
+    var name = path.split('/').last;
+    final dot = name.lastIndexOf('.');
+    final ext = dot == -1 ? '' : name.substring(dot + 1).toLowerCase();
+
+    const imageTypes = {
+      'jpg': 'jpeg', 'jpeg': 'jpeg', 'png': 'png',
+      'webp': 'webp', 'heic': 'heic', 'heif': 'heif', 'gif': 'gif',
+    };
+    const videoTypes = {
+      'mp4': 'mp4', 'mov': 'quicktime', '3gp': '3gpp',
+      'mkv': 'x-matroska', 'webm': 'webm', 'avi': 'x-msvideo',
+    };
+
+    if (kind == 'pdfs') {
+      if (ext != 'pdf') name = '$name.pdf';
+      return (type: http.MediaType('application', 'pdf'), name: name);
+    }
+    if (kind == 'videos') {
+      final sub = videoTypes[ext];
+      if (sub == null) {
+        return (type: http.MediaType('video', 'mp4'), name: '$name.mp4');
+      }
+      return (type: http.MediaType('video', sub), name: name);
+    }
+    final sub = imageTypes[ext];
+    if (sub == null) {
+      return (type: http.MediaType('image', 'jpeg'), name: '$name.jpg');
+    }
+    return (type: http.MediaType('image', sub), name: name);
+  }
+
   // ---------- submit ----------
   Future<void> _submit() async {
     final total = _selected('images') + _selected('videos') + _selected('pdfs');
@@ -3134,7 +3179,13 @@ class _UploadInventoryPageState extends State<SeizedUploadInventoryPage> {
       for (final kind in ['images', 'videos', 'pdfs']) {
         final cats = <String>[];
         for (final s in _slots[kind]!.where((s) => s.path != null)) {
-          req.files.add(await http.MultipartFile.fromPath(kind, s.path!));
+          final info = _mediaInfo(kind, s.path!);
+          req.files.add(await http.MultipartFile.fromPath(
+            kind,
+            s.path!,
+            filename: info.name,
+            contentType: info.type,
+          ));
           cats.add(s.category);
         }
         // file order ke hisaab se category list:
