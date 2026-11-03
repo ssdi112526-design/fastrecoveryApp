@@ -8,6 +8,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../Model_class/vehicle_detail_model.dart';
 import '../theme/app_theme.dart';
 
+/// Debug helper: Logcat / Run console mein "VDP" filter karke dekho.
+void _log(String tag, Object? msg) {
+  debugPrint('[VDP][$tag] $msg', wrapWidth: 1000);
+}
+
 class _Recipient {
   final String id;
   final String name;
@@ -22,6 +27,10 @@ class _Recipient {
     required this.roleLabel,
     this.isPrimary = false,
   });
+
+  @override
+  String toString() =>
+      '_Recipient(id=$id, name=$name, phone=$phone, role=$roleLabel, primary=$isPrimary)';
 }
 
 class VehicleDetailsPopup extends StatefulWidget {
@@ -63,6 +72,14 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
   @override
   void initState() {
     super.initState();
+    _log('INIT', 'popup opened');
+    try {
+      _log('INIT', 'item.toJson = ${jsonEncode(widget.item.toJson())}');
+    } catch (e) {
+      _log('INIT', 'item.toJson FAILED: $e');
+    }
+    _log('INIT',
+        'vehicleNumber="${widget.item.vehicleNumber}" chassisNumber="${widget.item.chassisNumber}"');
     _loadingLoaded = true;
     _fetchLoadedDetails();
     _prefetchRecipients();
@@ -70,6 +87,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
 
   @override
   void dispose() {
+    _log('DISPOSE', 'popup closed, loadedCtrl="${_loadedCtrl.text}"');
     _loadedCtrl.dispose();
     super.dispose();
   }
@@ -85,10 +103,15 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
         'chassisNumber': widget.item.chassisNumber,
       });
 
+      _log('LOADED GET', 'url = $uri');
+
       final response = await http.get(uri, headers: {
         'Accept': 'application/json',
         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       }).timeout(const Duration(seconds: 20));
+
+      _log('LOADED GET', 'status = ${response.statusCode}');
+      _log('LOADED GET', 'body = ${response.body}');
 
       final body = jsonDecode(response.body);
       if (response.statusCode >= 200 &&
@@ -96,24 +119,51 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
           body is Map &&
           body['success'] == true) {
         final detail = (body['data']?['loadedDetail'] ?? '').toString();
+        _log('LOADED GET', 'parsed loadedDetail = "$detail"');
         // user ne agar pehle hi kuch type kar diya ho to overwrite mat karo
         if (mounted && _loadedCtrl.text.isEmpty) {
           _loadedCtrl.text = detail;
+          _log('LOADED GET', 'controller filled with "$detail"');
+        } else {
+          _log('LOADED GET',
+              'controller NOT overwritten (mounted=$mounted, text="${_loadedCtrl.text}")');
         }
+      } else {
+        _log('LOADED GET', 'response not success -> skipped');
       }
     } catch (e) {
-      debugPrint('LOADED DETAILS ERROR: $e');
+      _log('LOADED GET ERROR', e);
     } finally {
       if (mounted) setState(() => _loadingLoaded = false);
     }
+  }
+
+  /// Web payload mein loaded details top-level par nahi dikhi, isliye
+  /// searchItem ke andar bhi bhej rahe hain (backend jo key padhe).
+  Map<String, dynamic> _searchItemWithLoaded() {
+    final loaded = _loadedCtrl.text.trim();
+    final m = Map<String, dynamic>.from(widget.item.toJson());
+    m['loadedDetail'] = loaded;
+    m['loadedDetails'] = loaded;
+    return m;
   }
 
   /// Message ke end mein user ke Loaded Details jod do
   /// (duplicate nahi hoga agar backend ne pehle hi daal diya ho).
   String _withLoaded(String message) {
     final loaded = _loadedCtrl.text.trim();
-    if (loaded.isEmpty || message.contains(loaded)) return message;
-    return '$message\n\nLoaded Details: $loaded';
+    _log('WITH_LOADED', 'loaded="$loaded"');
+    if (loaded.isEmpty) {
+      _log('WITH_LOADED', 'loaded empty -> message unchanged');
+      return message;
+    }
+    if (message.contains(loaded)) {
+      _log('WITH_LOADED', 'message already contains loaded -> unchanged');
+      return message;
+    }
+    final out = '$message\n\nLoaded Details: $loaded';
+    _log('WITH_LOADED', 'appended loaded details to message');
+    return out;
   }
 
   /// Internet na ho to item ke data se local message
@@ -140,16 +190,19 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
   /// Popup khulte hi recipients fetch karke cache kar lo,
   /// taaki baad mein net band ho tab bhi list mile.
   Future<void> _prefetchRecipients() async {
+    _log('PREFETCH', 'start');
     await _fetchRecipients();
   }
 
   /// Tap -> recipients fetch -> select sheet -> send / call
   Future<void> _handleRecipientTap(String channel) async {
+    _log('TAP', 'channel=$channel sharingChannel=$_sharingChannel');
     if (_sharingChannel != null) return;
     FocusScope.of(context).unfocus();
     setState(() => _sharingChannel = channel);
 
     final recipients = await _fetchRecipients();
+    _log('TAP', 'recipients count = ${recipients.length}');
 
     if (!mounted) return;
     setState(() => _sharingChannel = null);
@@ -158,9 +211,11 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       // Net band + cache bhi khali: WhatsApp phir bhi khul jaye
       // (contact user khud chunega)
       if (channel == 'whatsapp') {
+        _log('TAP', 'no recipients -> WhatsApp fallback with local message');
         await _openWhatsApp(null, _withLoaded(_buildLocalMessage()));
         return;
       }
+      _log('TAP', 'no recipients -> snack');
       _showSnack('No recipients found', isError: true);
       return;
     }
@@ -183,6 +238,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       actionLabel: channel == 'call' ? 'Call' : 'Send to',
       actionIcon: channel == 'call' ? Icons.call_rounded : Icons.send_rounded,
     );
+    _log('TAP', 'picked = $picked');
     if (picked == null || !mounted) return;
 
     if (channel == 'call') {
@@ -198,6 +254,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
 
     try {
       final token = await _getToken();
+      _log('RECIPIENTS GET', 'url = $_recipientsUrl');
       final response = await http.get(
         Uri.parse(_recipientsUrl),
         headers: {
@@ -207,27 +264,38 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
         },
       ).timeout(const Duration(seconds: 12));
 
+      _log('RECIPIENTS GET', 'status = ${response.statusCode}');
+      _log('RECIPIENTS GET', 'body = ${response.body}');
+
       final body = jsonDecode(response.body);
       if (response.statusCode >= 200 &&
           response.statusCode < 300 &&
           body is Map &&
           body['success'] == true) {
         final raw = (body['data']?['adminRecipients'] as List?) ?? [];
+        _log('RECIPIENTS GET', 'raw adminRecipients count = ${raw.length}');
         await prefs.setString(_recipientsCacheKey, jsonEncode(raw));
-        return _parseRecipients(raw);
+        final parsed = _parseRecipients(raw);
+        _log('RECIPIENTS GET', 'parsed = $parsed');
+        return parsed;
+      } else {
+        _log('RECIPIENTS GET', 'not success -> will try cache');
       }
     } catch (e) {
-      debugPrint('RECIPIENTS ERROR: $e');
+      _log('RECIPIENTS ERROR', e);
     }
 
     // Offline / error -> cached list
     try {
       final cached = prefs.getString(_recipientsCacheKey);
+      _log('RECIPIENTS CACHE', 'cached exists = ${cached != null}');
       if (cached != null) {
-        return _parseRecipients(jsonDecode(cached) as List);
+        final parsed = _parseRecipients(jsonDecode(cached) as List);
+        _log('RECIPIENTS CACHE', 'parsed = $parsed');
+        return parsed;
       }
     } catch (e) {
-      debugPrint('RECIPIENTS CACHE ERROR: $e');
+      _log('RECIPIENTS CACHE ERROR', e);
     }
     return [];
   }
@@ -335,7 +403,10 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
                         selected: i == selectedIndex,
                         accent: accent,
                         isDark: isDark,
-                        onTap: () => setSheet(() => selectedIndex = i),
+                        onTap: () {
+                          _log('SHEET', 'selected index=$i ${recipients[i]}');
+                          setSheet(() => selectedIndex = i);
+                        },
                       ),
                     ),
                   ),
@@ -499,6 +570,20 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
 
     try {
       final token = await _getToken();
+
+      final payload = {
+        'searchItem': _searchItemWithLoaded(),
+        'traceMode': 'ONLINE',
+        'shareChannel': channel,
+        'recipientId': r.id,
+        'recipientPhone': r.phone,
+        'loadedDetails': _loadedCtrl.text.trim(),
+        'loadedDetail': _loadedCtrl.text.trim(),
+      };
+      _log('SEND $channel', 'POST $_confirmationsUrl');
+      _log('SEND $channel', 'token present = ${token != null}');
+      _log('SEND $channel', 'PAYLOAD = ${jsonEncode(payload)}');
+
       final response = await http
           .post(
         Uri.parse(_confirmationsUrl),
@@ -508,23 +593,21 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
           if (token != null && token.isNotEmpty)
             'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({
-          'searchItem': widget.item.toJson(),
-          'traceMode': 'ONLINE',
-          'shareChannel': channel,
-          'recipientId': r.id,
-          'recipientPhone': r.phone,
-          'loadedDetails': _loadedCtrl.text.trim(),
-        }),
+        body: jsonEncode(payload),
       )
           .timeout(const Duration(seconds: 15));
+
+      _log('SEND $channel', 'RESPONSE status = ${response.statusCode}');
+      _log('SEND $channel', 'RESPONSE body = ${response.body}');
 
       if (!mounted) return;
 
       dynamic body;
       try {
         body = jsonDecode(response.body);
-      } catch (_) {}
+      } catch (e) {
+        _log('SEND $channel', 'jsonDecode FAILED: $e');
+      }
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300 ||
@@ -533,21 +616,29 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
         final msg = (body is Map && body['message'] != null)
             ? body['message'].toString()
             : 'Unable to share report';
+        _log('SEND $channel', 'FAILED -> $msg');
         _showSnack(msg, isError: true);
         return;
       }
 
+      _log('SEND $channel',
+          'saved loadedDetail on server = "${body['data']?['loadedDetail']}"');
+
       final traceReport = body['traceReport'];
       baseMessage =
       traceReport is Map ? (traceReport['message']?.toString() ?? '') : '';
-    } on SocketException catch (_) {
+      _log('SEND $channel', 'traceReport.message = $baseMessage');
+    } on SocketException catch (e) {
+      _log('SEND $channel', 'SocketException (offline): $e');
       baseMessage = null; // internet band
-    } on TimeoutException catch (_) {
+    } on TimeoutException catch (e) {
+      _log('SEND $channel', 'TimeoutException: $e');
       baseMessage = null; // net bahut slow / band
-    } on http.ClientException catch (_) {
+    } on http.ClientException catch (e) {
+      _log('SEND $channel', 'ClientException: $e');
       baseMessage = null;
     } catch (e) {
-      debugPrint('SHARE $channel ERROR: $e');
+      _log('SEND $channel ERROR', e);
       if (!mounted) return;
       _showSnack('Something went wrong. Please try again.', isError: true);
       return;
@@ -560,6 +651,9 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
     final bool offline = baseMessage == null || baseMessage.isEmpty;
     final String message =
     _withLoaded(offline ? _buildLocalMessage() : baseMessage);
+
+    _log('SEND $channel', 'offline = $offline');
+    _log('SEND $channel', 'FINAL MESSAGE =\n$message');
 
     if (offline) {
       _showSnack('Internet off hai, offline message bheja ja raha hai',
@@ -580,7 +674,10 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
     final uri = Uri.parse(
       'https://wa.me/$phone?text=${Uri.encodeComponent(message)}',
     );
+    _log('OPEN WA', 'phone = "$phone"');
+    _log('OPEN WA', 'uri = $uri');
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    _log('OPEN WA', 'launch ok = $ok');
     if (!ok) _showSnack('Could not open WhatsApp', isError: true);
   }
 
@@ -593,13 +690,18 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       'sms:+${_waPhone(r.phone)}${sep}body=${Uri.encodeComponent(message)}',
     );
 
+    _log('OPEN SMS', 'isIos = $isIos');
+    _log('OPEN SMS', 'uri = $uri');
     final ok = await launchUrl(uri);
+    _log('OPEN SMS', 'launch ok = $ok');
     if (!ok) _showSnack('Could not open messaging app', isError: true);
   }
 
   Future<void> _callRecipient(_Recipient r) async {
     final uri = Uri(scheme: 'tel', path: '+${_waPhone(r.phone)}');
+    _log('CALL', 'uri = $uri');
     final ok = await launchUrl(uri);
+    _log('CALL', 'launch ok = $ok');
     if (!ok) _showSnack('Could not open dialer', isError: true);
   }
 
@@ -609,10 +711,12 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString('token');
     if (stored != null && stored.isNotEmpty) return stored;
+    _log('TOKEN', 'token missing in SharedPreferences (key "token")');
     return null;
   }
 
   void _showSnack(String message, {bool isError = true}) {
+    _log('SNACK', '${isError ? "ERROR" : "INFO"}: $message');
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -648,6 +752,17 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
     try {
       final token = await _getToken();
 
+      final payload = {
+        'searchItem': _searchItemWithLoaded(),
+        'traceMode': 'ONLINE',
+        'shareChannel': 'email',
+        'loadedDetails': _loadedCtrl.text.trim(),
+        'loadedDetail': _loadedCtrl.text.trim(),
+      };
+      _log('SEND email', 'POST $_confirmationsUrl');
+      _log('SEND email', 'token present = ${token != null}');
+      _log('SEND email', 'PAYLOAD = ${jsonEncode(payload)}');
+
       final response = await http
           .post(
         Uri.parse(_confirmationsUrl),
@@ -657,21 +772,20 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
           if (token != null && token.isNotEmpty)
             'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({
-          'searchItem': widget.item.toJson(),
-          'traceMode': 'ONLINE',
-          'shareChannel': 'email',
-          'loadedDetails': _loadedCtrl.text.trim(),
-        }),
+        body: jsonEncode(payload),
       )
           .timeout(const Duration(seconds: 30));
+
+      _log('SEND email', 'RESPONSE status = ${response.statusCode}');
+      _log('SEND email', 'RESPONSE body = ${response.body}');
 
       if (!mounted) return;
 
       dynamic body;
       try {
         body = jsonDecode(response.body);
-      } catch (_) {
+      } catch (e) {
+        _log('SEND email', 'jsonDecode FAILED: $e');
         body = null;
       }
 
@@ -680,32 +794,42 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
         if (body is Map && body['message'] != null) {
           message = body['message'].toString();
         }
+        _log('SEND email', 'HTTP FAILED -> $message');
         _showSnack(message, isError: true);
         return;
       }
 
       if (body is! Map || body['success'] != true) {
+        _log('SEND email', 'success != true');
         _showSnack('Unable to share report', isError: true);
         return;
       }
 
+      _log('SEND email',
+          'saved loadedDetail on server = "${body['data']?['loadedDetail']}"');
+
       final traceReport = body['traceReport'];
       if (traceReport is! Map) {
+        _log('SEND email', 'traceReport missing');
         _showSnack('Report generated, but no share link received',
             isError: true);
         return;
       }
 
+      _log('SEND email', 'traceReport.message = ${traceReport['message']}');
       final message = _withLoaded(traceReport['message']?.toString() ?? '');
+      _log('SEND email', 'FINAL MESSAGE =\n$message');
       await _openEmail(message: message);
-    } on SocketException catch (_) {
+    } on SocketException catch (e) {
+      _log('SEND email', 'SocketException: $e');
       if (!mounted) return;
       _showSnack('Internet required to send email', isError: true);
-    } on TimeoutException catch (_) {
+    } on TimeoutException catch (e) {
+      _log('SEND email', 'TimeoutException: $e');
       if (!mounted) return;
       _showSnack('Internet required to send email', isError: true);
     } catch (e) {
-      debugPrint('SHARE EMAIL ERROR: $e');
+      _log('SEND email ERROR', e);
       if (!mounted) return;
       _showSnack('Something went wrong. Please try again.', isError: true);
     } finally {
@@ -722,8 +846,11 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       'subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(message)}',
     );
 
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    final can = await canLaunchUrl(uri);
+    _log('OPEN EMAIL', 'canLaunch = $can, uri = $uri');
+    if (can) {
+      final ok = await launchUrl(uri);
+      _log('OPEN EMAIL', 'launch ok = $ok');
     } else {
       _showSnack('No email app found on this device', isError: true);
     }
@@ -828,6 +955,7 @@ class _VehicleDetailsPopupState extends State<VehicleDetailsPopup> {
       minLines: 2,
       maxLines: 5,
       textCapitalization: TextCapitalization.sentences,
+      onChanged: (v) => _log('LOADED FIELD', 'typed = "$v"'),
       style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w600,

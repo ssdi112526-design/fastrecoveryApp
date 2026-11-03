@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../theme/app_theme.dart';
 import '../Confimation_cases/ConfirmedCases.dart';
 import 'Seized_update_inventory.dart';
 
@@ -493,12 +494,8 @@ class _SeizedSuccessfullyScreenState extends State<SeizedSuccessfullyScreen> {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(8, top + 8, 16, 38),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [_kBrandA, _kBrandB],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+      decoration: BoxDecoration(
+      gradient: AppColors.headerGradient,
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(26),
           bottomRight: Radius.circular(26),

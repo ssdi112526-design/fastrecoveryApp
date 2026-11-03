@@ -10,6 +10,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../theme/app_theme.dart';
 
+/// Debug helper: Logcat / Run console mein "PCP" filter karke dekho.
+void _plog(String tag, Object? msg) {
+  debugPrint('[PCP][$tag] $msg', wrapWidth: 1000);
+}
+
 // =============================================================
 // MODEL
 // =============================================================
@@ -42,7 +47,7 @@ class _ConfirmationItem {
   static String _s(dynamic v) => (v ?? '').toString().trim();
 
   factory _ConfirmationItem.fromJson(Map<String, dynamic> j) {
-    return _ConfirmationItem(
+    final item = _ConfirmationItem(
       id: _s(j['_id']),
       status: _s(j['status']),
       vehicleNumber: _s(j['vehicleNumber']),
@@ -54,6 +59,15 @@ class _ConfirmationItem {
       bankName: _s(j['bankName']),
       createdAt: DateTime.tryParse(_s(j['createdAt']))?.toLocal(),
     );
+
+    // Har item ka note / loaded raw value + parsed value
+    _plog(
+      'PARSE',
+      'id=${item.id} veh=${item.vehicleNumber} '
+          'RAW[requestNote=${j['requestNote']} | loadedShort=${j['loadedShort']} | loadedDetail=${j['loadedDetail']}] '
+          'PARSED[requestNote="${item.requestNote}" | loadedShort="${item.loadedShort}" | loadedDetail="${item.loadedDetail}"]',
+    );
+    return item;
   }
 
   /// Loaded short + detail ek text mein
@@ -101,6 +115,9 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
   // id -> item (insertion order maintain hota hai)
   final Map<String, _ConfirmationItem> _map = {};
 
+  // card build log sirf ek baar har item ke liye
+  final Set<String> _loggedCards = {};
+
   bool _loading = true;
   bool _loadingMore = false;
   bool _downloading = false;
@@ -115,12 +132,14 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
   @override
   void initState() {
     super.initState();
+    _plog('INIT', 'page opened');
     _scroll.addListener(_onScroll);
     _load(reset: true);
   }
 
   @override
   void dispose() {
+    _plog('DISPOSE', 'page closed');
     _scroll.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -135,6 +154,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
     final nearEnd =
         _scroll.position.pixels >= _scroll.position.maxScrollExtent - 300;
     if (nearEnd && _hasNext && !_loading && !_loadingMore) {
+      _plog('SCROLL', 'near end -> load more (page=$_page)');
       _load(reset: false);
     }
   }
@@ -142,6 +162,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
   Future<_PageResult> _fetchPage(int page) async {
     final prefs = await SharedPreferences.getInstance();
     final token = (prefs.getString('token') ?? '').trim();
+    _plog('FETCH', 'page=$page tokenPresent=${token.isNotEmpty}');
     if (token.isEmpty) throw Exception('Session expired');
 
     final uri = Uri.parse('$_baseUrl/api/confirmations').replace(
@@ -152,36 +173,64 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
         'groupBy': 'vehicle',
       },
     );
+    _plog('FETCH', 'GET $uri');
 
     final res = await http.get(uri, headers: {
       'Accept': 'application/json',
       'Authorization': 'Bearer $token',
     }).timeout(const Duration(seconds: 20));
 
+    _plog('FETCH', 'status=${res.statusCode} bodyLength=${res.body.length}');
+
     if (res.statusCode == 401) throw Exception('Session expired');
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      _plog('FETCH', 'ERROR body = ${res.body}');
       throw Exception('Server error (${res.statusCode})');
     }
 
     final body = jsonDecode(res.body);
     if (body is! Map || body['success'] != true) {
+      _plog('FETCH', 'Invalid response body = ${res.body}');
       throw Exception('Invalid response');
     }
 
+    _plog('FETCH', 'top-level keys = ${body.keys.toList()}');
+
     final items = <_ConfirmationItem>[];
     final rawData = body['data'];
+    _plog('FETCH', 'data is List = ${rawData is List}, '
+        'count = ${rawData is List ? rawData.length : "n/a"}');
+
     if (rawData is List) {
+      // Pehla item poora print karo (keys + values)
+      if (rawData.isNotEmpty && rawData.first is Map) {
+        final first = rawData.first as Map;
+        _plog('FETCH', 'FIRST ITEM keys = ${first.keys.toList()}');
+        _plog('FETCH', 'FIRST ITEM full = ${jsonEncode(first)}');
+      }
+
+      int withLoaded = 0;
+      int withNote = 0;
       for (final e in rawData) {
         if (e is Map) {
           final item =
           _ConfirmationItem.fromJson(Map<String, dynamic>.from(e));
-          if (item.id.isNotEmpty) items.add(item);
+          if (item.loadedText.isNotEmpty) withLoaded++;
+          if (item.requestNote.isNotEmpty) withNote++;
+          if (item.id.isNotEmpty) {
+            items.add(item);
+          } else {
+            _plog('FETCH', 'SKIPPED item (empty _id): ${jsonEncode(e)}');
+          }
         }
       }
+      _plog('FETCH',
+          'SUMMARY items=${items.length} withLoadedDetails=$withLoaded withRequestNote=$withNote');
     }
 
     final pg = body['pagination'];
     final hasNext = pg is Map && pg['hasNextPage'] == true;
+    _plog('FETCH', 'pagination = $pg, hasNext=$hasNext');
 
     int? total;
     final rt = body['requestTotal'];
@@ -191,11 +240,13 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
       final t = pg['total'];
       total = t is int ? t : int.tryParse(t.toString());
     }
+    _plog('FETCH', 'requestTotal=$rt -> total=$total');
 
     return _PageResult(items, hasNext, total);
   }
 
   Future<void> _load({required bool reset}) async {
+    _plog('LOAD', 'reset=$reset page=$_page');
     if (reset) {
       setState(() {
         _loading = true;
@@ -210,7 +261,10 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
       final r = await _fetchPage(_page);
       if (!mounted) return;
       setState(() {
-        if (reset) _map.clear();
+        if (reset) {
+          _map.clear();
+          _loggedCards.clear();
+        }
         for (final i in r.items) {
           _map[i.id] = i;
         }
@@ -221,8 +275,10 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
         _loadingMore = false;
         _error = null;
       });
-    } catch (e) {
-      debugPrint('[PENDING CONFIRMATION] error: $e');
+      _plog('LOAD', 'done: map=${_map.length} total=$_total hasNext=$_hasNext');
+    } catch (e, st) {
+      _plog('LOAD ERROR', e);
+      _plog('LOAD STACK', st);
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -258,6 +314,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
 
   Future<void> _downloadExcel() async {
     if (_downloading) return;
+    _plog('EXCEL', 'start, query="$_query"');
     setState(() => _downloading = true);
     try {
       // Saare pages fetch karo (sirf wahi nahi jo screen par load hue)
@@ -272,6 +329,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
         if (!r.hasNext || r.items.isEmpty) break;
         page++;
       }
+      _plog('EXCEL', 'fetched ${all.length} items across $page page(s)');
 
       final total = all.length;
       final rows = <MapEntry<int, _ConfirmationItem>>[];
@@ -282,6 +340,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
       final filtered = q.isEmpty
           ? rows
           : rows.where((e) => e.value.searchBlob.contains(q)).toList();
+      _plog('EXCEL', 'filtered rows = ${filtered.length}');
 
       if (filtered.isEmpty) {
         _snack('Download karne ke liye koi data nahi hai');
@@ -304,6 +363,8 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
 
       for (final e in filtered) {
         final r = e.value;
+        _plog('EXCEL ROW',
+            'sno=${e.key} veh=${r.vehicleNumber} note="${r.requestNote}" loaded="${r.loadedText.replaceAll('\n', ' - ')}"');
         sheet.appendRow([
           xl.TextCellValue('${e.key}'),
           xl.TextCellValue(r.vehicleNumber),
@@ -317,6 +378,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
 
       final bytes = excel.save();
       if (bytes == null) throw Exception('Excel file ban nahi payi');
+      _plog('EXCEL', 'bytes = ${bytes.length}');
 
       final dir = await getTemporaryDirectory();
       final n = DateTime.now();
@@ -325,12 +387,15 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
           '${n.year}${two(n.month)}${two(n.day)}_${two(n.hour)}${two(n.minute)}${two(n.second)}';
       final file = File('${dir.path}/pending_confirmations_$stamp.xlsx');
       await file.writeAsBytes(bytes, flush: true);
+      _plog('EXCEL', 'saved at ${file.path}');
 
       await Share.shareXFiles(
         [XFile(file.path)],
         text: 'Pending Confirmations (${filtered.length} cases)',
       );
-    } catch (e) {
+    } catch (e, st) {
+      _plog('EXCEL ERROR', e);
+      _plog('EXCEL STACK', st);
       _snack(e.toString().contains('Session expired')
           ? 'Session expired. Please login again.'
           : 'Excel error: $e');
@@ -340,6 +405,7 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
   }
 
   void _snack(String m) {
+    _plog('SNACK', m);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -490,7 +556,10 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
             child: TextField(
               controller: _searchCtrl,
               textInputAction: TextInputAction.search,
-              onChanged: (v) => setState(() => _query = v.trim()),
+              onChanged: (v) {
+                _plog('SEARCH', 'query="$v"');
+                setState(() => _query = v.trim());
+              },
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -682,6 +751,16 @@ class _PendingConfirmationPageState extends State<PendingConfirmationPage> {
     final snoBg = isDark ? Colors.white.withOpacity(.08) : const Color(0xffF1F4F9);
 
     final status = i.status.isEmpty ? 'PENDING' : i.status.toUpperCase();
+
+    // Card par kya dikh raha hai (ek baar har item ke liye)
+    if (_loggedCards.add(i.id)) {
+      _plog(
+        'CARD',
+        'sno=$sno id=${i.id} veh=${i.vehicleNumber} '
+            'noteShown="${_v(i.requestNote)}" '
+            'loadedShown="${i.loadedText.isEmpty ? '—' : i.loadedText}"',
+      );
+    }
 
     return Container(
       decoration: _cardDecoration(isDark),
