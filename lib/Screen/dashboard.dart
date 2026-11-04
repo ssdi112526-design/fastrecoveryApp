@@ -84,6 +84,35 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
     _loadDashboardData();
   }
 
+  // =========================================================
+// API 6 — SUBSCRIPTION (Remaining Days)
+// =========================================================
+
+  Future<Map<String, dynamic>> _getSubscription(
+      Map<String, String> headers,
+      ) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/repo-admin/subscription'),
+      headers: headers,
+    );
+
+    if (response.statusCode == 401) {
+      throw Exception('Session expired');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Subscription API failed: ${response.statusCode}');
+    }
+
+    final body = jsonDecode(response.body);
+
+    if (body['success'] != true) {
+      throw Exception('Subscription API returned success=false');
+    }
+
+    return Map<String, dynamic>.from(body['data'] ?? {});
+  }
+
   @override
   void dispose() {
     _pageAnimationController.dispose();
@@ -301,18 +330,23 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
   }
   Future<void> _loadStats(Map<String, String> headers) async {
     final results = await Future.wait<Object?>([
-      _fetchStat('/api/confirmations/stats/pending-count', headers),
-      _fetchStat('/api/confirmations/stats/inventory-confirmed-count', headers),
-      _fetchStat('/api/confirmations/stats/count', headers),
-      _fetchStat('/api/repo-cases/stats/linked-upload-agencies', headers),
-      _fetchCancelCount(headers), // <- yahan change
+      _fetchStat('/api/confirmations/stats/pending-count', headers),            // 0
+      _fetchStat('/api/confirmations/stats/inventory-confirmed-count', headers), // 1
+      _fetchStat('/api/confirmations/stats/count', headers),                    // 2
+      _fetchStat('/api/repo-cases/stats/linked-upload-agencies', headers),      // 3
+      _fetchStat('/api/repo-admin/subscription', headers),                      // 4
+      _fetchCancelCount(headers),                                               // 5
     ]);
 
     final pending = results[0] as Map<String, dynamic>?;
     final inventory = results[1] as Map<String, dynamic>?;
     final count = results[2] as Map<String, dynamic>?;
     final records = results[3] as Map<String, dynamic>?;
-    final cancel = results[4] as int?;
+    final subscriptionData = results[4] as Map<String, dynamic>?;
+    final cancel = results[5] as int?;
+
+    final subscription =
+    (subscriptionData?['subscription'] as Map?)?.cast<String, dynamic>();
 
     if (!mounted) return;
     setState(() {
@@ -321,6 +355,9 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       }
       if (inventory != null) {
         _inventoryConfirmed = _toInt(inventory['inventoryConfirmed']);
+      }
+      if (subscription != null) {
+        _remainingDays = _toInt(subscription['remainingDays']);
       }
       if (count != null) {
         _confirmedConfirmations = _toInt(
@@ -334,7 +371,7 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
         _companyTotalRecords = _toInt(records['companyTotalRecords']);
       }
       if (cancel != null) {
-        _cancelConfirmations = cancel; // <- naya
+        _cancelConfirmations = cancel;
       }
       _statsLoading = false;
     });
