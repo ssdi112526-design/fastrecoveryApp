@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../Service/SharedPreferenceService.dart';
 import '../auth/login/login_page.dart';
 import '../Model_class/profile_model.dart';
@@ -769,6 +770,33 @@ class _HomeScreenState extends State<HomeScreen> {
     return (value != null && value.isNotEmpty) ? value : '—';
   }
 
+  Future<void> _launchUrl(String url) async {
+    try {
+      final ok = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!ok) _showSnack('Could not open link');
+    } catch (_) {
+      _showSnack('Could not open link');
+    }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+    );
+  }
+
+
   // ============================================================
   // BUILD
   // ============================================================
@@ -804,6 +832,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 12),
                   const OfflineSyncCard(),
                   _buildStatsCards(),
+                  const SizedBox(height: 18),
+                  _buildFooter(isDark),
                 ],
               ),
             ),
@@ -1505,6 +1535,97 @@ class _HomeScreenState extends State<HomeScreen> {
     return rows;
   }
 
+
+  Widget _footerLink({
+    required IconData icon,
+    required String label,
+    required String url,
+    required bool isDark,
+  }) {
+    final textColor =
+    isDark ? const Color(0xff9CAAC4) : const Color(0xff64748B);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => _launchUrl(url),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: AppColors.blue600),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFooter(bool isDark) {
+    final mutedText =
+    isDark ? const Color(0xff6B7893) : const Color(0xff94A3B8);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Image.asset(
+          isDark
+              ? 'assets/images/fastrecovery_logo_2dark.png'
+              : 'assets/images/fastrecovery_logo-2.png',
+          height: 30,
+        ),
+        Text(
+          'Developed By: Software Solutions Development India',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : Colors.black,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 14,
+          runSpacing: 4,
+          children: [
+            _footerLink(
+              icon: Icons.call_rounded,
+              label: '+91 8796814100',
+              url: 'tel:+918796814100',
+              isDark: isDark,
+            ),
+            _footerLink(
+              icon: Icons.call_rounded,
+              label: '+91 8796824100',
+              url: 'tel:+918796824100',
+              isDark: isDark,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Copyright © ${DateTime.now().year} SSDI All rights reserved.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: mutedText,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _homeStatCard({
     required bool isDark,
     required String label,
@@ -1523,16 +1644,17 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: border),
+        border: Border.all(color: AppColors.blue600, width: 1.4),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? .24 : .045),
+            color: AppColors.blue600.withOpacity(isDark ? .22 : .12),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
+        // ... baaki same
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(

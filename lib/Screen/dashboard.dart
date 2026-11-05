@@ -784,11 +784,13 @@ class _AgencyDashboardPageState extends State<AgencyDashboardPage>
       color: isDark ? const Color(0xff10182A) : Colors.white,
       borderRadius: BorderRadius.circular(20),
       border: Border.all(
-        color: isDark ? const Color(0xff24304A) : const Color(0xffE5EAF2),
+        color: AppColors.blue600,   // blue highlight
+        width: 1.4,
       ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(isDark ? .23 : .04),
+          // halka blue glow, taaki highlight aur achha dikhe
+          color: AppColors.blue600.withOpacity(isDark ? .22 : .12),
           blurRadius: 18,
           offset: const Offset(0, 8),
         ),
