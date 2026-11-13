@@ -128,20 +128,37 @@ Future<AgentBill> fetchAgentBill(String? token) async {
 // Everything below reads from Theme.of(context), so it automatically follows
 // the app's light / dark theme. Only the "paid / unpaid" semantic colours are
 // tuned per brightness for readability.
+//
+// extension _Tx on BuildContext {
+//   ThemeData get th => Theme.of(this);
+//   ColorScheme get cs => Theme.of(this).colorScheme;
+//   bool get isDark => Theme.of(this).brightness == Brightness.dark;
+//   Color get okColor => isDark ? const Color(0xFF66BB6A) : const Color(0xFF2E7D32);
+//   Color get badColor => isDark ? const Color(0xFFEF5350) : const Color(0xFFC62828);
+//   Color get tealColor => isDark ? const Color(0xFF4DB6AC) : const Color(0xFF00796B);
+//   Color get mutedText => cs.onSurface.withOpacity(0.62);
+//   Color get cardBorder => cs.onSurface.withOpacity(isDark ? 0.12 : 0.08);
+// }
 
 extension _Tx on BuildContext {
   ThemeData get th => Theme.of(this);
   ColorScheme get cs => Theme.of(this).colorScheme;
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
+
   Color get okColor => isDark ? const Color(0xFF66BB6A) : const Color(0xFF2E7D32);
   Color get badColor => isDark ? const Color(0xFFEF5350) : const Color(0xFFC62828);
   Color get tealColor => isDark ? const Color(0xFF4DB6AC) : const Color(0xFF00796B);
-  Color get mutedText => cs.onSurface.withOpacity(0.62);
+
+  // NEW / CHANGED
+  Color get textColor => isDark ? Colors.white : const Color(0xFF0F172A);
+  Color get mutedText => isDark ? Colors.white70 : cs.onSurface.withOpacity(0.62);
+  Color get cardBg => isDark ? const Color(0xFF111827) : th.cardColor;
+
   Color get cardBorder => cs.onSurface.withOpacity(isDark ? 0.12 : 0.08);
 }
 
 BoxDecoration _cardDeco(BuildContext c, {Color? tint}) => BoxDecoration(
-  color: c.th.cardColor,
+    color: c.cardBg,   // c.th.cardColor ki jagah
   borderRadius: BorderRadius.circular(16),
   border: Border.all(color: tint?.withOpacity(0.30) ?? c.cardBorder),
   boxShadow: c.isDark
@@ -188,12 +205,22 @@ class _RepoPaymentPageState extends State<RepoPaymentPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // No hard-coded background / appbar colours: inherits your app theme.
-      appBar: AppBar(
-        title: const Text('Repo Payments'),
-        centerTitle: true,
-      ),
-      body: FutureBuilder<AgentBill>(
+        appBar: AppBar(
+          title: Text(
+            'Repo Payments',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: context.textColor,
+            ),
+          ),
+          iconTheme: IconThemeData(color: context.textColor),
+          centerTitle: false,
+        ),
+        body: DefaultTextStyle.merge(
+            style: TextStyle(color: context.textColor),
+            child:
+      FutureBuilder<AgentBill>(
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
@@ -252,6 +279,7 @@ class _RepoPaymentPageState extends State<RepoPaymentPage> {
           );
         },
       ),
+        ),
     );
   }
 }
